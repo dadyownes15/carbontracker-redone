@@ -3,18 +3,19 @@ from datetime import datetime
 from typing import Any, Dict, Generic
 
 from pydantic.dataclasses import dataclass
-from src.data_provider.data_provider import T, DataProvider
+from pydantic import ConfigDict
+from src.data_provider.data_provider import TData, DataProvider
 
 @dataclass(frozen=True)
 class TrackerEvent():
     ...
     
 
-@dataclass(frozen=True)
-class MeasurementEvent(TrackerEvent,T):
-    provider: DataProvider[T] 
+@dataclass(frozen=True, config=ConfigDict(arbitrary_types_allowed=True))
+class MeasurementEvent(TrackerEvent, Generic[TData]):
+    provider_name: str 
     timestamp: datetime
-    data: T 
+    data: TData 
     
 @dataclass(frozen=True)
 class EventStop(TrackerEvent):    
@@ -45,10 +46,10 @@ class GaurdEvent(TrackerEvent):
     pass
             
 @dataclass(frozen=True)
-class FinishedSession(TrackerEvent)
+class FinishedSession(TrackerEvent):
     pass
     
 @dataclass(frozen=True)
-class StartedSession(TrackerEvent)
+class StartedSession(TrackerEvent):
     pass
      

@@ -2,11 +2,11 @@
 
 
 from queue import Queue
-from src.core.config import SessionConfig
+from src.core.config import SessionConfig, ProviderType
 from src.core.handler_thread import HandlerThread
-from src.core.tracker_thread import TrackerThread
+from src.observer.factory import observer_factory
 from src.core.writer_thread import WriterThread
-from src.data_provider.factory import create_provider_threads 
+from src.data_provider.factory import provider_factory 
 
 class CarbonTracker:
     """
@@ -109,18 +109,28 @@ class CarbonTracker:
         self.writer_queue = Queue()
         self.event_sink = [self.writer_queue]
         
-        # Load threads - provider factory returns a tuple with (provider,measurement_event)
-        self.provider_threads = [
-                    provider_factory(p_config) 
-                    for p_config in self.session_config.provider_configs
-                ]
+        # Separate, statically typed measurement storage lists
+        self.power_measurements = []
+        self.intensity_measurements = []
+        
+        # Load provider threads via factory
+        self.provider_threads = []
+        for p_config in self.session_config.provider_configs:
+            if p_config.provider_type == ProviderType.POWER:
+                self.provider_threads.append(
+                    provider_factory(p_config, self.power_measurements)
+                )
+            elif p_config.provider_type == ProviderType.INTENSITY:
+                self.provider_threads.append(
+                    provider_factory(p_config, self.intensity_measurements)
+                )
                 
         # self.guard_thread = create_guard_thread(session_config) 
         
-        self.tracker_thread = TrackerThread(
-                observer_config=self.session_config.observer_config,
-                marker_queue = self.marker_queue,
-            ) 
+        self.observer_thread = observer_factory(
+            config=self.session_config.observer_config,
+            marker_queue=self.marker_queue
+        )
         
         
         self.handler_thread = HandlerThread(
@@ -128,6 +138,8 @@ class CarbonTracker:
             event_sink = self.event_sink,
             session_config = self.session_config,
             provider_threads = self.provider_threads,
+            power_measurements = self.power_measurements,
+            intensity_measurements = self.intensity_measurements,
         )
         
         self.writer_thread = WriterThread(
@@ -135,7 +147,7 @@ class CarbonTracker:
                     event_queue = self.writer_queue,
                 )
         
-        self.threads = [self.tracker_thread,self.writer_thread,*self.provider_threads, self.handler_thread]
+        self.threads = [self.observer_thread,self.writer_thread,*self.provider_threads, self.handler_thread]
 
         for thread in self.threads:
             thread.start()
@@ -143,20 +155,18 @@ class CarbonTracker:
             
             
     def epoch_start(self):
-        self.tracker.epoch_start()
+        self.observer_thread.manual_start()
         
     def epoch_end(self):
-        self.tracker.epoch_end()
+        self.observer_thread.manual_end()
         
     def stop(self):
         for thread in self.provider_threads:
             thread.stop()
             thread.join()
 
-        self.tracker_thread.stop()
-        self.guard_thread.stop()
-        self.tracker_thread.join()
-        self.guard_thread.join()
+        self.observer_thread.stop()
+        self.observer_thread.join()
 
         self.writer_thread.stop() 
         self.writer_thread.join()

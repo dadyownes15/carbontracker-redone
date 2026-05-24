@@ -13,6 +13,9 @@ class WriterThread(Thread):
         # when your main application exits
         self.daemon = True
 
+    def stop(self) -> None:
+        self.event_queue.put(None)
+
     def run(self) -> None:
         """Continuously monitors the queue and prints incoming events."""
         while True:

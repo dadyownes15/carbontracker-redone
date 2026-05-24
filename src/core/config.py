@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -15,11 +16,18 @@ class SimulatedComponent(BaseModel):
     power_draw_w: float
 
 
+class ProviderType(str, Enum):
+    POWER = "power"
+    INTENSITY = "intensity"
+
+
 class ProviderConfig(BaseModel):
+    provider_type: ProviderType
     sample_interval: float = 60.0
 
 
 class PowerMeasurementConfig(ProviderConfig):
+    provider_type: Literal[ProviderType.POWER] = ProviderType.POWER
     components: List[Literal["cpu", "ram", "gpu"]] = ["cpu", "ram", "gpu"]
     pue: float = 1.1
     pids: List[int] = Field(default_factory=list)
@@ -28,6 +36,7 @@ class PowerMeasurementConfig(ProviderConfig):
 
 
 class IntensityMeasurementConfig(ProviderConfig):
+    provider_type: Literal[ProviderType.INTENSITY] = ProviderType.INTENSITY
     method: Literal["electricityMaps", "static", "auto", "custom"] = "auto"
     location: Optional[str] = None
     provider_key_ref: Optional[str] = None
@@ -46,8 +55,8 @@ class PredictionConfig(BaseModel):
 
 
 class ObserverConfig(BaseModel):
-    type: Literal["python", "process", "slurm-process"]
-    prefix: Optional[str]
+    type: Literal["manual", "process", "slurm-process"]
+    prefix: Optional[str] = None
 
 
 class BudgetPolicy(BaseModel):
@@ -67,7 +76,7 @@ class SessionConfig(BaseModel):
     project_config: Optional[ProjectConfig] = None
     
     # Tracker configs
-    provider_configs: List[ProviderConfig]
+    provider_configs: List[Union[PowerMeasurementConfig, IntensityMeasurementConfig]]
     observer_config: ObserverConfig
     prediction_config: PredictionConfig = Field(default_factory=PredictionConfig)
     
@@ -140,7 +149,7 @@ class SessionConfig(BaseModel):
         )
 
         # 4. Observer Config (Incredibly simple now)
-        observer_config = ObserverConfig(type="python")
+        observer_config = ObserverConfig(type="manual")
 
         # 5. Budget Policies
         forecast_budget_policy = None
