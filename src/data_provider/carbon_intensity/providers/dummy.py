@@ -1,10 +1,12 @@
 import math
 from datetime import datetime, timedelta
 from typing import List
-from src.data_provider.carbon_intensity.intensity_measurement import IntensityMeasurement, Location
-from src.data_provider.carbon_intensity.intensity_provider import ForecastingIntensityProvider
 
-class DummyForecaster(ForecastingIntensityProvider):
+# 1. Removed IntensityMeasurement from imports (the provider shouldn't know about the wrapper)
+from src.data_provider.carbon_intensity.intensity_provider import IntensityProvider,Location, IntensityMeasurementData
+
+
+class DummyForecaster(IntensityProvider):
     """
     A simulated carbon intensity provider.
     Satisfies IntensityProvider.location via a simple instance attribute.
@@ -15,11 +17,13 @@ class DummyForecaster(ForecastingIntensityProvider):
         self.location = location
         self.base_intensity = base_intensity
 
-    def fetch(self) -> IntensityMeasurement:
+    # 2. Updated return type to the raw Data payload
+    def fetch(self) -> IntensityMeasurementData:
         """Returns the current simulated intensity."""
         return self._generate(datetime.now(), is_prediction=False)
 
-    def get_forecast(self, hours: int) -> List[IntensityMeasurement]:
+    # 3. Updated return type to a List of raw Data payloads
+    def get_forecast(self, hours: int) -> List[IntensityMeasurementData]:
         """Generates a list of future measurements for the next N hours."""
         return [
             self._generate(datetime.now() + timedelta(hours=h), is_prediction=True)
@@ -30,7 +34,8 @@ class DummyForecaster(ForecastingIntensityProvider):
         """No hardware or API connections to close for the dummy."""
         pass
 
-    def _generate(self, time: datetime, is_prediction: bool) -> IntensityMeasurement:
+    # 4. Updated return type to the raw Data payload
+    def _generate(self, time: datetime, is_prediction: bool) -> IntensityMeasurementData:
         """
         Internal logic to create a measurement based on a 24-hour sine wave.
         Dips at 12:00 (high renewables/solar), peaks at 00:00.
@@ -40,7 +45,8 @@ class DummyForecaster(ForecastingIntensityProvider):
         variation = (self.base_intensity * 0.25) * cycle
         current_intensity = self.base_intensity + variation
 
-        return IntensityMeasurement(
+        # 5. Return ONLY the data payload, plugging in the required timestamp
+        return IntensityMeasurementData(
             timestamp=time,
             location=self.location,
             intensity=round(current_intensity, 2),

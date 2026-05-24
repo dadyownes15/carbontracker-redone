@@ -1,6 +1,19 @@
-from src.data_provider.data_provider import DataProvider
-from src.data_provider.power.power_measurement import PowerMeasurement
+from abc import ABC
+from datetime import datetime
+
+from pydantic.dataclasses import dataclass
+
+from src.data_provider.data_provider import MeasurementData, DataProvider 
 
 
-class PowerProvider(DataProvider[PowerMeasurement]):
+@dataclass(frozen=True)
+class PowerMeasurementData(MeasurementData):
+    source_id: str
+    wattage: float
+    source: str
+    device_id: str
+    pid: int
+
+
+class PowerProvider(DataProvider[PowerMeasurementData], ABC):
     pass

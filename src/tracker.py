@@ -3,8 +3,10 @@
 
 from queue import Queue
 from src.core.config import SessionConfig
-from src.core.session import TrackerThread
-from src.data_provider.factory import provider_factory
+from src.core.handler_thread import HandlerThread
+from src.core.tracker_thread import TrackerThread
+from src.core.writer_thread import WriterThread
+from src.data_provider.factory import create_provider_threads 
 
 class CarbonTracker:
     """
@@ -100,35 +102,40 @@ class CarbonTracker:
                     sim_gpu_watts=sim_gpu_watts,
                     sim_gpu_util=sim_gpu_util
                 )
-
-        
-        self.providers = provider_factory(session_config) 
         
         # Queue
         self.marker_queue = Queue(maxsize=100)
-        self.event_queue = Queue(maxsize=100)
         
+        self.writer_queue = Queue()
+        self.event_sink = [self.writer_queue]
         
-        # Load threads 
+        # Load threads - provider factory returns a tuple with (provider,measurement_event)
         self.provider_threads = [
-                    provider_factory(p_config, marker_queue, event_queue) 
+                    provider_factory(p_config) 
                     for p_config in self.session_config.provider_configs
                 ]
-        self.guard_thread = create_guard_thread(session_config) 
+                
+        # self.guard_thread = create_guard_thread(session_config) 
         
         self.tracker_thread = TrackerThread(
-                observer_config=session_config.observer_config,
-                event_queue=self.event_queue,
+                observer_config=self.session_config.observer_config,
                 marker_queue = self.marker_queue,
             ) 
-
-        self.writer_thread = Writer(
-            event_queue=self.event_queue,
-            marker_queue=self.marker_queue,
-            config=self.session_config
+        
+        
+        self.handler_thread = HandlerThread(
+            marker_queue= self.marker_queue,
+            event_sink = self.event_sink,
+            session_config = self.session_config,
+            provider_threads = self.provider_threads,
         )
         
-        self.threads = [self.tracker,self.writer,self.guard_thread,*self.provider_threads]
+        self.writer_thread = WriterThread(
+                    #config=self.session_config,
+                    event_queue = self.writer_queue,
+                )
+        
+        self.threads = [self.tracker_thread,self.writer_thread,*self.provider_threads, self.handler_thread]
 
         for thread in self.threads:
             thread.start()
@@ -142,7 +149,6 @@ class CarbonTracker:
         self.tracker.epoch_end()
         
     def stop(self):
-        """Graceful shutdown and summary generation."""
         for thread in self.provider_threads:
             thread.stop()
             thread.join()

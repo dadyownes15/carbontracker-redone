@@ -1,3 +1,0 @@
-
-def provider_factory(config):
-    ...

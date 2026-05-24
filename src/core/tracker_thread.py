@@ -18,13 +18,11 @@ class TrackerThread(Thread):
     def __init__(
         self,
         observer_config: ObserverConfig,
-        event_queue: "Queue[TrackerEvent]", # Outgoing events
         marker_queue: "Queue[Marker]", # Ingoing events
         
     ) -> None:
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self.logger.info("Initializing new tracking session")
-        self.event_queue = event_queue
         self.marker_queue = marker_queue
         self.running = False
 
@@ -37,7 +35,7 @@ class TrackerThread(Thread):
             self.event_observer = create_and_start_observer(config=observer_config,marker_queue=self.marker_queue)
             # self.measurement_threads = 
             self.running = True
-        except
+        except Exception:
             self.running = False
             raise
         

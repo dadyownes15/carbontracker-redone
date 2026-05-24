@@ -1,14 +1,21 @@
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Generic, TypeVar, Dict, Type, Callable, Any
 
-from abc import abstractmethod
-from typing import Generic
-from typing_extensions import TypeVar
+# Define the generic type for the payload
+TData = TypeVar('TData')
 
-T = TypeVar('T')
-class DataProvider(Generic[T]):
+# 1. Base Provider Interface
+class DataProvider(ABC, Generic[TData]):
     @abstractmethod
-    def fetch(self) -> T:
+    def fetch(self) -> TData:
         pass
         
     @abstractmethod
-    def shutdown(self):
+    def shutdown(self) -> None:
         pass
+
+@dataclass(frozen=True)
+class MeasurementData:
+    timestamp: datetime
