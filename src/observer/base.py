@@ -12,11 +12,5 @@ class BaseObserverThread(Thread):
     def stop(self) -> None:
         self._stop_event.set()
 
-    def manual_start(self) -> None:
-        pass
-
-    def manual_end(self) -> None:
-        pass
-
     def run(self) -> None:
         raise NotImplementedError("Subclasses must implement run()")
