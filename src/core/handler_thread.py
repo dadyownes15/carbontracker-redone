@@ -12,13 +12,13 @@ from datetime import datetime
 from src.data_provider.data_provider import MeasurementData
 from src.data_provider.power.power_provider import PowerMeasurementData
 from src.data_provider.carbon_intensity.intensity_provider import IntensityMeasurementData
-from src.data_provider.factory import BaseProviderThread
+from src.data_provider.factory import ProviderThread
 
 class HandlerThread(Thread):
     def __init__(
         self,
         session_config: SessionConfig,
-        provider_threads: List[BaseProviderThread],
+        provider_threads: List[ProviderThread],
         marker_queue: "queue.Queue[Marker]",
         event_sink: "List[queue.Queue[TrackerEvent]]",
         power_measurements: List[PowerMeasurementData],
@@ -47,7 +47,9 @@ class HandlerThread(Thread):
         self._last_power_idx = 0
         self._last_intensity_idx = 0
         
-        # Polling frequency for time-based logic (seconds)
+        # _poll_timeout is the maximum amount of time between provider fetches 
+        # For accurate power calculations, it is essentially _poll_timeout is low, as point measurements on wattage usage usualy has high variance
+        # It is expected that the providers can handle request efficiently, for example intensity measurement rarely changes within 15 minutes granularity, thus providers should have some caching logic.
         self._poll_timeout = 1.0 
 
     def run(self):
@@ -58,6 +60,7 @@ class HandlerThread(Thread):
                 self.marker_queue.task_done()
                 
             except queue.Empty:
+                # Triggered when markerque has been empty for $_poll_timeout secounds
                 self._run_periodic_tasks()
 
     def _process_marker(self, marker: Marker):
@@ -107,7 +110,7 @@ class HandlerThread(Thread):
 
     def _run_periodic_tasks(self):
         """Logic executed every X seconds when no markers are arriving."""
-        self._flush_measurements()
+        self._trigger_provider_measurements()
 
     def _flush_measurements(self):
         """Sweep the lists and stream new MeasurementEvents to the sinks."""
@@ -123,7 +126,6 @@ class HandlerThread(Thread):
             self._last_intensity_idx += 1
 
     def _calc_event_stats(self,end_marker: Marker) -> EventStats:
-        # pop span
         span_start: datetime = self._active_spans[end_marker.span_id]
 
         relevant_power = [

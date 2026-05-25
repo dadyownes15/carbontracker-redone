@@ -34,10 +34,8 @@ class DummyForecaster(IntensityProvider):
         """No hardware or API connections to close for the dummy."""
         pass
 
-    # 4. Updated return type to the raw Data payload
     def _generate(self, time: datetime, is_prediction: bool) -> IntensityMeasurementData:
         """
-        Internal logic to create a measurement based on a 24-hour sine wave.
         Dips at 12:00 (high renewables/solar), peaks at 00:00.
         """
         
@@ -45,7 +43,6 @@ class DummyForecaster(IntensityProvider):
         variation = (self.base_intensity * 0.25) * cycle
         current_intensity = self.base_intensity + variation
 
-        # 5. Return ONLY the data payload, plugging in the required timestamp
         return IntensityMeasurementData(
             timestamp=time,
             location=self.location,

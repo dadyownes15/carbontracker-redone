@@ -4,7 +4,7 @@ from typing import Any, Dict, Generic
 
 from pydantic.dataclasses import dataclass
 from pydantic import ConfigDict
-from src.data_provider.data_provider import TData, DataProvider
+from src.data_provider.data_provider import TData 
 
 @dataclass(frozen=True)
 class TrackerEvent():
