@@ -56,11 +56,23 @@ class PredictionConfig(BaseModel):
     estimator: Literal["mean"] = "mean"
     confidence_intervals: bool = True
     validate_at_end: bool = False
+    forecast_interval_s: Optional[float] = None
 
+class SessionMode(str, Enum):
+    PYTHON_MANUAL = "python-manual"
+    PYTHON_DECORATOR = "python-decorator"
+    PROCESS = "process"
+    
+    @property
+    def is_python(self) -> bool:
+        return self in (SessionMode.PYTHON_MANUAL, SessionMode.PYTHON_DECORATOR)
+    
+    @property
+    def is_process(self) -> bool:
+        return self in (SessionMode.PROCESS,)
 
 class ObserverConfig(BaseModel):
-    type: Literal["python-manual","python-decorator", "process", "slurm-process"]
-    prefix: str = "carbontracker" 
+    prefix: str = "carbontracker"
 
 
 class BudgetPolicy(BaseModel):
@@ -74,10 +86,13 @@ class BudgetPolicy(BaseModel):
 
 
 class SessionConfig(BaseModel):
+    mode: SessionMode
     run_name: str
     log_dir: str
     flush_interval: int = 10
     log_level: int = 20  # logging.INFO default
+    ignore_errors: bool = False
+    stats_emit_interval_s: float = 5.0
     project_config: Optional[ProjectConfig] = None
 
     # Tracker configs
@@ -155,7 +170,7 @@ class SessionConfig(BaseModel):
         )
 
         # 4. Observer Config (Incredibly simple now)
-        observer_config = ObserverConfig(type="python-manual")
+        observer_config = ObserverConfig()
 
         # 5. Budget Policies
         forecast_budget_policy = None
@@ -174,8 +189,11 @@ class SessionConfig(BaseModel):
             log_level = 20 # logging.INFO
 
         return cls(
+            mode=SessionMode.PYTHON_MANUAL,
             run_name=run_name,
             log_dir=resolved_log_dir,
+            ignore_errors=ignore_errors,
+            stats_emit_interval_s=5.0,
             project_config=ProjectConfig(
                 name=run_name,
                 api_key_reference="legacy_env",

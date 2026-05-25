@@ -18,7 +18,7 @@ def main():
         print(f"--- Finished Epoch {epoch} ---")
 
     print("\nStopping tracker...")
-    tracker.stop()
+    tracker.finish()
     print("Tracking complete!")
 
 if __name__ == "__main__":

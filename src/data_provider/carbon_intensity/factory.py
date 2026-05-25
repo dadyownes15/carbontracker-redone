@@ -8,9 +8,9 @@ from src.data_provider.data_provider_thread import DataProviderThread
 from src.data_provider.carbon_intensity.intensity_provider import (
     IntensityMeasurementData, 
     IntensityResolution,
-    ResolutionStep,
     ResolvedLocation
 )
+from src.core.resolution import ResolutionStep
 from src.data_provider.carbon_intensity.location import resolve_location, location_to_country
 from src.data_provider.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
 from src.data_provider.carbon_intensity.providers.static_provider import (
@@ -35,6 +35,7 @@ def create_intensity_thread(
     This also handles printing the resolution log to the user.
     """
     resolution = resolve_intensity_provider(config)
+    print_resolution(resolution)
     
     return DataProviderThread(
         sample_interval=config.sample_interval,

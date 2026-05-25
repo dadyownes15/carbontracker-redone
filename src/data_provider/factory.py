@@ -17,9 +17,11 @@ from src.data_provider.power.providers.gpu.sim_gpu import SimulatedGPUProvider
 from src.data_provider.power.providers.cpu.intel import IntelCPU
 from src.data_provider.power.providers.cpu.generic import GenericCPU
 from src.data_provider.power.providers.gpu.nvidia import NvidiaGPU
-from src.data_provider.power.providers.apple_silicon.powermetrics import AppleSiliconCPU, AppleSiliconGPU
+from src.data_provider.power.providers.apple_silicon.powermetrics import AppleSiliconCPU, AppleSiliconGPU, AppleSiliconANE
 from src.core.config import RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig
 
+
+from src.core.resolution import ResolutionStep
 
 logger = logging.getLogger("carbontracker.power_factory")
 
@@ -38,32 +40,47 @@ def create_power_thread(config: PowerMeasurementConfig, aggregation_queue: "queu
     if isinstance(config, RealPowerMeasurementConfig):
         providers = []
         pids = [int(pid) for pid in config.devices_by_pids] if config.devices_by_pids else []
+        steps: List[ResolutionStep] = []
         
         if "cpu" in config.components:
-            cpu_provider = None
             for cls in [IntelCPU, AppleSiliconCPU, GenericCPU]:
                 try:
                     cpu_provider = cls(pids=pids)
+                    steps.append(ResolutionStep("provider_resolved", f"CPU: {cpu_provider.name}", "success"))
+                    providers.append(cpu_provider)
                     break
-                except ProviderPermissionError as e:
-                    logger.warning(f"{cls.__name__} permission denied: {e}. Trying fallback.")
-                except ProviderUnavailableError as e:
-                    logger.info(f"{cls.__name__} unavailable: {e}. Trying fallback.")
-            if cpu_provider:
-                providers.append(cpu_provider)
+                except (ProviderPermissionError, ProviderUnavailableError):
+                    continue
+            else:
+                steps.append(ResolutionStep("no_provider", "No CPU provider available", "warning"))
                 
         if "gpu" in config.components:
-            gpu_provider = None
             for cls in [NvidiaGPU, AppleSiliconGPU]:
                 try:
                     gpu_provider = cls(pids=pids)
+                    steps.append(ResolutionStep("provider_resolved", f"GPU: {gpu_provider.name}", "success"))
+                    providers.append(gpu_provider)
                     break
-                except ProviderPermissionError as e:
-                    logger.warning(f"{cls.__name__} permission denied: {e}. Trying fallback.")
-                except ProviderUnavailableError as e:
-                    logger.info(f"{cls.__name__} unavailable: {e}. Trying fallback.")
-            if gpu_provider:
-                providers.append(gpu_provider)
+                except (ProviderPermissionError, ProviderUnavailableError):
+                    continue
+            else:
+                steps.append(ResolutionStep("no_provider", "No GPU provider available", "warning"))
+            
+            try:
+                ane_provider = AppleSiliconANE(pids=pids)
+                steps.append(ResolutionStep("provider_resolved", f"ANE: {ane_provider.name}", "success"))
+                providers.append(ane_provider)
+            except (ProviderPermissionError, ProviderUnavailableError):
+                pass
+
+        # Print the resolution log
+        for step in steps:
+            if step.level == "success":
+                logger.info(f"✓ {step.detail}")
+            elif step.level == "warning":
+                logger.warning(f"⚠ {step.detail}")
+            else:
+                logger.info(f"ℹ {step.detail}")
 
         return DataProviderThread(config.sample_interval, providers, aggregation_queue, notify_event)
         

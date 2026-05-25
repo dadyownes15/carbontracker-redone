@@ -1,13 +1,13 @@
 # Events are processing events from generate from the event observer
 from datetime import datetime
-from typing import Any, Dict, Generic
+from typing import Any, Dict, Generic, Optional
 
 from enum import Enum
 from pydantic.dataclasses import dataclass
 from pydantic import ConfigDict
 from src.data_provider.data_provider import TData 
 from src.core.markers import Marker
-from src.core.stats import EventStatsData, SessionStatsData
+from src.core.stats import EventStatsData, SessionStatsData, SessionFinalStats
 class LogSeverity(str, Enum):
     DEBUG = "DEBUG"
     INFO = "INFO"
@@ -31,11 +31,15 @@ class MeasurementEvent(TrackerEvent, Generic[TData]):
 class EventStop(TrackerEvent):    
     ended_at: datetime
     span_id: str
+    span_type: str = "epoch"
+    parent_span_id: Optional[str] = None
     
 @dataclass(frozen=True)
 class EventStart(TrackerEvent):    
     started_at: datetime 
     span_id: str
+    span_type: str = "epoch"
+    parent_span_id: Optional[str] = None
 
 @dataclass(frozen=True)
 class EventStats(TrackerEvent):
@@ -48,16 +52,18 @@ class EventStats(TrackerEvent):
 class SessionCurrentStatsEvent(TrackerEvent):
     timestamp: datetime
     stats: SessionStatsData
+
 @dataclass(frozen=True)
 class PredictionEvent(TrackerEvent):    
     created_at: datetime 
     span_id: str
-    # We need some data model for the prediction results
-    # 
+    result: Any # Using Any to avoid circular import with prediction.py, or we can import it. Wait, let's just use Any for now or TYPE_CHECKING.
 
 @dataclass(frozen=True)
-class GaurdEvent(TrackerEvent):
-    pass
+class GuardEvent(TrackerEvent):
+    created_at: datetime
+    verdict: Any
+    prediction: Any
 
 @dataclass(frozen=True)
 class DiagnosticEvent(TrackerEvent):
@@ -69,7 +75,8 @@ class DiagnosticEvent(TrackerEvent):
             
 @dataclass(frozen=True)
 class FinishedSession(TrackerEvent):
-    pass
+    timestamp: datetime
+    stats: SessionFinalStats
     
 @dataclass(frozen=True)
 class StartedSession(TrackerEvent):

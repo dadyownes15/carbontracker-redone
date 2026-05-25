@@ -45,11 +45,7 @@ class IntensityMeasurementData(MeasurementData):
     carbon_intensity: float                # usually Co2eq g / kwh
     is_prediction: bool
 
-@dataclass(frozen=True)
-class ResolutionStep:
-    action: str          # e.g. "location_resolved", "api_key_found", "fallback_country"
-    detail: str          # human-readable explanation
-    level: str           # "info", "warning", "error"
+from src.core.resolution import ResolutionStep
 
 from dataclasses import dataclass as std_dataclass
 

@@ -21,3 +21,11 @@ class ProviderConfigError(ProviderError):
 class APIError(ProviderError):
     """Raised when an external API call fails (e.g., network timeout, 5xx error)."""
     pass
+
+class GuardTriggeredError(CarbonTrackerError):
+    """Raised when a budget guard triggers a stop action in python mode."""
+    pass
+
+class WrongModeError(CarbonTrackerError):
+    """Raised when a budget guard triggers a stop action in python mode."""
+    pass

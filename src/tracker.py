@@ -2,13 +2,15 @@ import logging
 from queue import Queue
 import threading
 from threading import Event
-from src.core.config import SessionConfig, ProviderType
+from src.core.config import SessionConfig, ProviderType, SessionMode
 from src.core.aggregator_thread import AggregatorThread
 from src.observer.factory import observer_factory
 from src.core.terminal_output_thread import TerminalOutputThread
 from src.core.file_logger_thread import FileLoggerThread
 from src.data_provider.factory import provider_factory 
 from src.core.logging_handler import EventQueueLogHandler
+from src.core.exceptions import WrongModeError
+from src.core.execution_guard import GuardVerdict
 
 class CarbonTracker:
     """
@@ -80,8 +82,6 @@ class CarbonTracker:
         sim_gpu_util=None
     ):
        
-
-        ## Fill in the args
         self.session_config = SessionConfig.from_legacy_args(
                     epochs=epochs,
                     epochs_before_pred=epochs_before_pred,
@@ -126,69 +126,89 @@ class CarbonTracker:
         
         self.observer_thread = observer_factory(
             config=self.session_config.observer_config,
+            mode=self.session_config.mode,
             aggregation_queue=self.aggregation_queue,
             event_sink=self.event_sink,
             notify_events=self.provider_trigger_events
         )
         
+        self._guard_triggered = Event()
+        self._guard_verdict = None
+        
+        def _default_guard_callback(verdict: GuardVerdict):
+            # TODO (dadyownes15):
+            # Add proper gaurd callbacks that match the config
+            self._guard_verdict = verdict
+            self._guard_triggered.set()
+            self.logger.warn("Budget has been violated: ", verdict.reason)
+        
         self.aggregator_thread = AggregatorThread(
-            session_config=self.session_config,
+            prediction_config=self.session_config.prediction_config,
+            budget_policy=self.session_config.budget_policy,
+            stats_emit_interval_s=self.session_config.stats_emit_interval_s,
+            mode=self.session_config.mode,
             aggregation_queue=self.aggregation_queue,
             event_sink=self.event_sink,
+            guard_callback=_default_guard_callback if self.session_config.mode.is_python else None
         )
         
         self.terminal_thread = TerminalOutputThread(
-            config=self.session_config,
+            log_level=self.session_config.log_level,
             event_queue=self.terminal_queue
         )
         self.logger_thread = FileLoggerThread(
-            config=self.session_config,
+            log_dir=self.session_config.log_dir,
+            run_name=self.session_config.run_name,
             event_queue=self.logger_queue
         )
         
+        # Order is important here for proper closedown
         self.threads = [
             self.observer_thread, 
+            *self.provider_threads, 
+            self.aggregator_thread,
             self.terminal_thread, 
             self.logger_thread, 
-            *self.provider_threads, 
-            self.aggregator_thread
         ]
 
         for thread in self.threads:
             thread.start()
 
-        print("Active threads list:")
+        self.logger.debug("Active threads list:")
         for thread in threading.enumerate():
-            print(f" - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}")
+            self.logger.debug(f" - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}")
 
     def _setup_logging(self):
-        logger = logging.getLogger("carbontracker")
-        logger.setLevel(self.session_config.log_level)
-        logger.propagate = False 
-        logger.handlers.clear()
+        self.logger = logging.getLogger("carbontracker")
+        self.logger.setLevel(self.session_config.log_level)
+        self.logger.propagate = False 
+        self.logger.handlers.clear()
 
         queue_handler = EventQueueLogHandler(self.event_sink)
         formatter = logging.Formatter('%(message)s')
         queue_handler.setFormatter(formatter)
-        logger.addHandler(queue_handler)
+        self.logger.addHandler(queue_handler)
             
     def epoch_start(self):
+        if self.session_config.mode != SessionMode.PYTHON_MANUAL:
+            raise WrongModeError("epoch_start() is only available in python-manual mode")
         self.observer_thread.manual_start()
         
     def epoch_end(self):
+        if self.session_config.mode != SessionMode.PYTHON_MANUAL:
+            raise WrongModeError("epoch_start() is only available in python-manual mode") # using proper exception later
         self.observer_thread.manual_end()
         
-    def stop(self):
+    def finish(self):
+        final_stats = None
+            
         for thread in self.threads:
-            thread.stop()
+            result = thread.stop()
+            if isinstance(thread, AggregatorThread):
+                final_stats = result
             thread.join()
-            print("Closed thread: ", thread.name)
-
+            
         for thread in threading.enumerate():
-            print(f" - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}")
-        return self._generate_session_report()
-
-    def _generate_session_report(self):
-        # Fetch the final aggregated data from the writer or tracker state
-        # Returns a dataclass/dict with total energy, emissions, duration, etc.
-        pass
+            self.logger.debug("f - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}")
+            
+        return final_stats

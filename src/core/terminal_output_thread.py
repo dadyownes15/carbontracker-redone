@@ -4,13 +4,12 @@ import sys
 import logging
 
 from src.core.events import TrackerEvent, DiagnosticEvent, LogSeverity
-from src.core.config import SessionConfig
 from src.core.utils import SEVERITY_MAP
 
 class TerminalOutputThread(Thread):
-    def __init__(self, config: SessionConfig, event_queue: Queue[TrackerEvent]): 
+    def __init__(self, log_level: int, event_queue: Queue[TrackerEvent]): 
         super().__init__()
-        self.config = config
+        self.log_level = log_level
         self.event_queue = event_queue
         self.name = "Terminal Output Thread"
         
@@ -33,7 +32,7 @@ class TerminalOutputThread(Thread):
                 
             if isinstance(event, DiagnosticEvent):
                 event_level = SEVERITY_MAP.get(event.severity, logging.INFO)
-                if event_level >= self.config.log_level:
+                if event_level >= self.log_level:
                     if event.severity in [LogSeverity.WARNING, LogSeverity.ERROR, LogSeverity.CRITICAL]:
                         print(f"[{event.severity.value}] {event.message}", file=sys.stderr)
                     elif event.severity == LogSeverity.INFO:
@@ -42,7 +41,7 @@ class TerminalOutputThread(Thread):
                         print(f"[DEBUG] {event.message}")
             else:
                 # Print out other events only if verbosity allows
-                if self.config.log_level <= logging.INFO:
+                if self.log_level <= logging.INFO:
                     print(f"[TerminalOutputThread] Processing Event: {type(event).__name__}")
             
             # Tell the queue that processing for this item is complete

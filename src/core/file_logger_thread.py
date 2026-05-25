@@ -7,7 +7,6 @@ from enum import Enum
 import dataclasses
 
 from src.core.events import TrackerEvent
-from src.core.config import SessionConfig
 
 class EventJSONEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -23,9 +22,10 @@ class EventJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 class FileLoggerThread(Thread):
-    def __init__(self, config: SessionConfig, event_queue: Queue[TrackerEvent]): 
+    def __init__(self, log_dir: str, run_name: str, event_queue: Queue[TrackerEvent]): 
         super().__init__()
-        self.config = config
+        self.log_dir = log_dir
+        self.run_name = run_name
         self.event_queue = event_queue
         self.name = "File Logger Thread"
         
@@ -33,10 +33,10 @@ class FileLoggerThread(Thread):
         # when your main application exits
         self.daemon = True
         
-        log_dir = Path(self.config.log_dir)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        run_name = self.config.run_name if self.config.run_name else "carbontracker"
-        self.log_file_path = log_dir / f"{run_name}_events.jsonl"
+        log_dir_path = Path(self.log_dir)
+        log_dir_path.mkdir(parents=True, exist_ok=True)
+        run_name = self.run_name if self.run_name else "carbontracker"
+        self.log_file_path = log_dir_path / f"{run_name}_events.jsonl"
 
     def stop(self) -> None:
         self.event_queue.put(None)

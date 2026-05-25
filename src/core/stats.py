@@ -25,7 +25,12 @@ class SessionStatsData:
     current_intensity: float
     total_emissions_g: float     # Cumulative so far
     total_power_usage_kwh: float # Cumulative so far
-    predicted_total_power_kwh: Optional[float] = None
-    predicted_total_emissions_g: Optional[float] = None
-    forecast_intensity: Optional[List[float]] = None
     power_usage_pr_device: Dict[str, float] = field(default_factory=dict)
+
+@dataclass(frozen=True)
+class SessionFinalStats:
+    """Final aggregated statistics for the entire session."""
+    total_emissions_g: float
+    total_power_usage_kwh: float
+    duration_s: float
+    completed_spans_count: int
