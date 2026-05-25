@@ -8,10 +8,15 @@ TData = TypeVar('TData')
 
 # 1. Base Provider Interface
 class DataProvider(ABC, Generic[TData]):
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
     @abstractmethod
     def fetch(self) -> TData:
         pass
-        
+
     @abstractmethod
     def shutdown(self) -> None:
         pass

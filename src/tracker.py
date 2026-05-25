@@ -1,12 +1,16 @@
 
 
 
+import logging
 from queue import Queue
+import threading
 from src.core.config import SessionConfig, ProviderType
 from src.core.handler_thread import HandlerThread
 from src.observer.factory import observer_factory
-from src.core.writer_thread import WriterThread
+from src.core.terminal_output_thread import TerminalOutputThread
+from src.core.file_logger_thread import FileLoggerThread
 from src.data_provider.factory import provider_factory 
+from src.core.logging_handler import EventQueueLogHandler
 
 class CarbonTracker:
     """
@@ -106,8 +110,11 @@ class CarbonTracker:
         # Queue
         self.marker_queue = Queue(maxsize=100)
         
-        self.writer_queue = Queue()
-        self.event_sink = [self.writer_queue]
+        self.terminal_queue = Queue()
+        self.logger_queue = Queue()
+        self.event_sink = [self.terminal_queue, self.logger_queue]
+        
+        self._setup_logging()
         
         # Separate, statically typed measurement storage lists
         self.power_measurements = []
@@ -142,17 +149,35 @@ class CarbonTracker:
             intensity_measurements = self.intensity_measurements,
         )
         
-        self.writer_thread = WriterThread(
-                    #config=self.session_config,
-                    event_queue = self.writer_queue,
-                )
+        self.terminal_thread = TerminalOutputThread(
+            config=self.session_config,
+            event_queue=self.terminal_queue
+        )
+        self.logger_thread = FileLoggerThread(
+            config=self.session_config,
+            event_queue=self.logger_queue
+        )
         
-        self.threads = [self.observer_thread,self.writer_thread,*self.provider_threads, self.handler_thread]
+        self.threads = [self.observer_thread, self.terminal_thread, self.logger_thread, *self.provider_threads, self.handler_thread]
 
         for thread in self.threads:
             thread.start()
 
-            
+
+        print("Active threads list:")
+        for thread in threading.enumerate():
+            print(f" - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}")
+
+    def _setup_logging(self):
+        logger = logging.getLogger("carbontracker")
+        logger.setLevel(self.session_config.log_level)
+        logger.propagate = False 
+        logger.handlers.clear()
+
+        queue_handler = EventQueueLogHandler(self.event_sink)
+        formatter = logging.Formatter('%(message)s')
+        queue_handler.setFormatter(formatter)
+        logger.addHandler(queue_handler)
             
     def epoch_start(self):
         self.observer_thread.manual_start()
@@ -161,16 +186,13 @@ class CarbonTracker:
         self.observer_thread.manual_end()
         
     def stop(self):
-        for thread in self.provider_threads:
+        for thread in self.threads:
             thread.stop()
             thread.join()
+            print("Closed thread: ", thread.name)
 
-        self.observer_thread.stop()
-        self.observer_thread.join()
-
-        self.writer_thread.stop() 
-        self.writer_thread.join()
-
+        for thread in threading.enumerate():
+            print(f" - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}")
         return self._generate_session_report()
 
     def _generate_session_report(self):

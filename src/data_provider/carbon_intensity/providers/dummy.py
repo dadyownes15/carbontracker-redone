@@ -3,19 +3,23 @@ from datetime import datetime, timedelta
 from typing import List
 
 # 1. Removed IntensityMeasurement from imports (the provider shouldn't know about the wrapper)
-from src.data_provider.carbon_intensity.intensity_provider import IntensityProvider,Location, IntensityMeasurementData
+from src.data_provider.data_provider import DataProvider
+from src.data_provider.carbon_intensity.intensity_provider import Location, IntensityMeasurementData
 
 
-class DummyForecaster(IntensityProvider):
+class DummyForecaster(DataProvider[IntensityMeasurementData]):
     """
     A simulated carbon intensity provider.
-    Satisfies IntensityProvider.location via a simple instance attribute.
+    Satisfies DataProvider.location via a simple instance attribute.
     """
     
     def __init__(self, location: Location, base_intensity: float = 400.0):
-        # This instance variable satisfies the @property @abstractmethod in the base class
         self.location = location
         self.base_intensity = base_intensity
+
+    @property
+    def name(self) -> str:
+        return "Dummy Simulated Forecaster"
 
     # 2. Updated return type to the raw Data payload
     def fetch(self) -> IntensityMeasurementData:

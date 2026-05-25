@@ -4,18 +4,20 @@ from src.data_provider.data_provider import DataProvider, MeasurementData
 
 TData = TypeVar('TData', bound=MeasurementData)
 
-class ProviderThread(Thread, Generic[TData]):
+class DataProviderThread(Thread, Generic[TData]):
     """
     Statically typed, autonomous base provider thread.
     """
-    def __init__(self, sample_interval: float, providers: List[DataProvider[TData]]) -> None:
+    def __init__(self, sample_interval: float, providers: List[DataProvider[TData]], measurements: List[TData]) -> None:
         super().__init__()
         self.sample_interval = sample_interval
         self.providers = providers
+        self.measurements = measurements
         self._trigger_event = Event()
         self._stop_event = Event()
         self._fetch_done_event = None
         self.daemon = True
+        self.name: str =  "_".join([provider.name for provider in self.providers])
 
     def trigger_fetch(self) -> Event:
         """Wakes up the thread to do an immediate fetch and returns a completion event."""
@@ -44,6 +46,8 @@ class ProviderThread(Thread, Generic[TData]):
                 self._fetch_done_event = None
 
     def _work(self) -> None:
-        raise NotImplementedError("Subclasses must implement _work")
+        for provider in self.providers:
+            measurement = provider.fetch()
+            self.measurements.append(measurement)
 
 

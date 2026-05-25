@@ -1,14 +1,15 @@
-from datetime import datetime
-from typing import Optional
 import queue
 import uuid
+from datetime import datetime
+from typing import Optional
 
 from src.core.markers import Marker
-from src.observer.base import BaseObserverThread
+from src.observer.base import ObserverThread
 
-class ManualObserverThread(BaseObserverThread):
+
+class ManualObserverThread(ObserverThread):
     def __init__(self, marker_queue: "queue.Queue[Marker]") -> None:
-        super().__init__(marker_queue)
+        super().__init__(marker_queue, name= "python-manual")
         self._current_epoch = 0
         self._current_span_id: Optional[str] = None
         self._trace_id = str(uuid.uuid4())
@@ -28,8 +29,8 @@ class ManualObserverThread(BaseObserverThread):
 
     def manual_end(self) -> None:
         if not self._current_span_id:
-            return  
-            
+            return
+
         marker = Marker(
             marker_id=str(uuid.uuid4()),
             trace_id=self._trace_id,

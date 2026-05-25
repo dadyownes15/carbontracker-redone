@@ -1,39 +1,42 @@
 from datetime import datetime
-from time import time
-from src.data_provider.power.power_provider import PowerMeasurementData, PowerProvider
+from src.data_provider.data_provider import DataProvider
+from src.data_provider.power.power_provider import PowerMeasurementData
 
 
-class DummyGPU(PowerProvider):
-    def __init__(self) -> None:
+class DummyGPU(DataProvider[PowerMeasurementData]):
+    def __init__(self, pids=None) -> None:
         super().__init__()
         
+    @property
+    def name(self) -> str:
+        return "Dummy GPU"
+
     def fetch(self) -> PowerMeasurementData:
         return PowerMeasurementData(
             timestamp=datetime.now(),
-            source_id="GPU:0",
-            wattage=50.0,
-            source="nvidia-smi",  # Added a mock source for realism
-            device_id="GPU:0",
-            pid=0,
+            component="gpu",
+            power_usage_pr_device={"GPU:0": 50.0},
+            pid=None,
         )
 
     def shutdown(self) -> None:
         pass
 
 
-class DummyCPU(PowerProvider):
-    def __init__(self) -> None:
+class DummyCPU(DataProvider[PowerMeasurementData]):
+    def __init__(self, pids=None) -> None:
         super().__init__()
         
+    @property
+    def name(self) -> str:
+        return "Dummy CPU"
+
     def fetch(self) -> PowerMeasurementData:
-        # Changed from returning PowerMeasurement to PowerMeasurementData
         return PowerMeasurementData(
             timestamp=datetime.now(),
-            source_id="CPU:0",
-            wattage=10.0,
-            source="intel-rapl",  # Added a mock source for realism
-            device_id="CPU:0",
-            pid=0,
+            component="cpu",
+            power_usage_pr_device={"CPU:0": 10.0},
+            pid=None,
         )
 
     def shutdown(self) -> None:

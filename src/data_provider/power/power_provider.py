@@ -1,19 +1,14 @@
-from abc import ABC
-from datetime import datetime
+from typing import Dict, Optional, Union
 
 from pydantic.dataclasses import dataclass
 
-from src.data_provider.data_provider import MeasurementData, DataProvider 
-
+from src.core.config import RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig
+from src.data_provider.data_provider import MeasurementData 
 
 @dataclass(frozen=True)
 class PowerMeasurementData(MeasurementData):
-    source_id: str
-    wattage: float
-    source: str
-    device_id: str
-    pid: int
+    component: str
+    power_usage_pr_device: Dict[str,float]
+    pid: Optional[int]
 
-
-class PowerProvider(DataProvider[PowerMeasurementData], ABC):
-    pass
+PowerMeasurementConfig = Union[RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig]

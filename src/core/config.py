@@ -1,6 +1,6 @@
+from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
-from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -25,29 +25,33 @@ class ProviderConfig(BaseModel):
     provider_type: ProviderType
     sample_interval: float = 60.0
 
-
-class PowerMeasurementConfig(ProviderConfig):
+class RealPowerMeasurementConfig(ProviderConfig):
     provider_type: Literal[ProviderType.POWER] = ProviderType.POWER
     components: List[Literal["cpu", "ram", "gpu"]] = ["cpu", "ram", "gpu"]
     pue: float = 1.1
-    pids: List[int] = Field(default_factory=list)
-    devices_by_pid: Dict[int, List[int]] = Field(default_factory=dict)
-    simulated_components: Tuple[SimulatedComponent, ...] = ()
+    devices_by_pids: List[str]
 
+class SimulatedPowerMeasurementConfig(ProviderConfig):
+    provider_type: Literal[ProviderType.POWER] = ProviderType.POWER
+    sample_interval: float = 0.0
+    simulated_components: List[SimulatedComponent] = Field(default_factory=list)
+
+PowerMeasurementConfig = Union[RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig]
 
 class IntensityMeasurementConfig(ProviderConfig):
     provider_type: Literal[ProviderType.INTENSITY] = ProviderType.INTENSITY
-    method: Literal["electricityMaps", "static", "auto", "custom"] = "auto"
+    method: Literal["electricityMaps", "static", "auto"] = "auto"
     location: Optional[str] = None
+    auto_detect_location: bool = True
     provider_key_ref: Optional[str] = None
     static_carbon_intensity_g_per_kwh: Optional[float] = None
-    api_keys: Optional[Dict[str, str]] = None 
+    api_keys: Optional[Dict[str, str]] = None
 
 
 class PredictionConfig(BaseModel):
     enabled: bool = False
     unit_name: str = "epoch"
-    total_units: Optional[int] = None 
+    total_units: Optional[int] = None
     predict_after: int = 2
     estimator: Literal["mean"] = "mean"
     confidence_intervals: bool = True
@@ -55,8 +59,8 @@ class PredictionConfig(BaseModel):
 
 
 class ObserverConfig(BaseModel):
-    type: Literal["manual", "process", "slurm-process"]
-    prefix: Optional[str] = None
+    type: Literal["python-manual","python-decorator", "process", "slurm-process"]
+    prefix: str = "carbontracker" 
 
 
 class BudgetPolicy(BaseModel):
@@ -71,15 +75,16 @@ class BudgetPolicy(BaseModel):
 
 class SessionConfig(BaseModel):
     run_name: str
-    log_dir: str 
+    log_dir: str
     flush_interval: int = 10
+    log_level: int = 20  # logging.INFO default
     project_config: Optional[ProjectConfig] = None
-    
+
     # Tracker configs
     provider_configs: List[Union[PowerMeasurementConfig, IntensityMeasurementConfig]]
     observer_config: ObserverConfig
     prediction_config: PredictionConfig = Field(default_factory=PredictionConfig)
-    
+
     # Separated budget policies for actuals vs. forecasts
     budget_policy: Optional[BudgetPolicy] = None
     forecast_budget_policy: Optional[BudgetPolicy] = None
@@ -109,7 +114,7 @@ class SessionConfig(BaseModel):
         sim_gpu_util: Optional[float] = None,
         **kwargs
     ) -> "SessionConfig":
-        
+
         # 1. Parse Components
         parsed_components = []
         if components == "all":
@@ -127,11 +132,12 @@ class SessionConfig(BaseModel):
             sim_comps.append(SimulatedComponent(name=sim_gpu, power_draw_w=sim_gpu_watts))
 
         # 2. Build Providers
-        power_config = PowerMeasurementConfig(
+        power_config = RealPowerMeasurementConfig(
             sample_interval=float(update_interval),
             components=parsed_components,
-            simulated_components=tuple(sim_comps)
+            devices_by_pids=[]
         )
+        # TODO: Handle simulated components properly in the legacy bridge if needed
 
         intensity_config = IntensityMeasurementConfig(
             sample_interval=900.0,
@@ -149,7 +155,7 @@ class SessionConfig(BaseModel):
         )
 
         # 4. Observer Config (Incredibly simple now)
-        observer_config = ObserverConfig(type="manual")
+        observer_config = ObserverConfig(type="python-manual")
 
         # 5. Budget Policies
         forecast_budget_policy = None
@@ -158,6 +164,14 @@ class SessionConfig(BaseModel):
 
         resolved_log_dir = log_dir if log_dir else "logs/"
         run_name = log_file_prefix if log_file_prefix else "legacy_run"
+
+        # Map legacy verbose (0, 1, 2) to logging levels
+        if verbose == 0:
+            log_level = 30 # logging.WARNING
+        elif verbose >= 2:
+            log_level = 10 # logging.DEBUG
+        else:
+            log_level = 20 # logging.INFO
 
         return cls(
             run_name=run_name,
@@ -170,6 +184,7 @@ class SessionConfig(BaseModel):
             provider_configs=[power_config, intensity_config],
             observer_config=observer_config,
             prediction_config=prediction_config,
-            budget_policy=None, 
-            forecast_budget_policy=forecast_budget_policy
+            budget_policy=None,
+            forecast_budget_policy=forecast_budget_policy,
+            log_level=log_level
         )
