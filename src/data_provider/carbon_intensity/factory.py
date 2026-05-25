@@ -21,9 +21,14 @@ from src.data_provider.carbon_intensity.providers.static_provider import (
 
 logger = logging.getLogger("carbontracker.intensity_factory")
 
+import queue
+from threading import Event
+from src.core.events import TrackerEvent
+
 def create_intensity_thread(
     config: IntensityMeasurementConfig,
-    intensity_measurements: List[IntensityMeasurementData]
+    aggregation_queue: "queue.Queue[TrackerEvent]",
+    notify_event: Event
 ) -> DataProviderThread[IntensityMeasurementData]:
     """
     Creates a ProviderThread encapsulating the resolved intensity provider.
@@ -34,7 +39,8 @@ def create_intensity_thread(
     return DataProviderThread(
         sample_interval=config.sample_interval,
         providers=[resolution.provider],
-        measurements=intensity_measurements
+        aggregation_queue=aggregation_queue,
+        notify_event=notify_event
     )
 
 
@@ -106,7 +112,7 @@ def resolve_intensity_provider(config: IntensityMeasurementConfig) -> IntensityR
         provider = ElectricityMapsProvider(resolved_loc, em_key)
         steps.append(ResolutionStep(
             action="provider_electricitymaps",
-            detail=f"Using: {provider.provider_name}",
+            detail=f"Using: {provider.name}",
             level="success"
         ))
         return IntensityResolution(provider, resolved_loc, steps)
@@ -124,7 +130,7 @@ def resolve_intensity_provider(config: IntensityMeasurementConfig) -> IntensityR
                 ))
                 steps.append(ResolutionStep(
                     action="provider_electricitymaps",
-                    detail=f"Using: {provider.provider_name}",
+                    detail=f"Using: {provider.name}",
                     level="success"
                 ))
                 return IntensityResolution(provider, resolved_loc, steps)

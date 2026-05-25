@@ -1,15 +1,27 @@
 import queue
 import uuid
 from datetime import datetime
-from typing import Optional
+from threading import Event
+from typing import Optional, List
 
 from src.core.markers import Marker
+from src.core.events import TrackerEvent
 from src.observer.base import ObserverThread
 
 
 class ManualObserverThread(ObserverThread):
-    def __init__(self, marker_queue: "queue.Queue[Marker]") -> None:
-        super().__init__(marker_queue, name= "python-manual")
+    def __init__(
+        self,
+        aggregation_queue: "queue.Queue[TrackerEvent]",
+        event_sink: "List[queue.Queue[TrackerEvent]]",
+        notify_events: List[Event]
+    ) -> None:
+        super().__init__(
+            aggregation_queue=aggregation_queue,
+            event_sink=event_sink,
+            notify_events=notify_events,
+            name="python-manual"
+        )
         self._current_epoch = 0
         self._current_span_id: Optional[str] = None
         self._trace_id = str(uuid.uuid4())
@@ -25,7 +37,7 @@ class ManualObserverThread(ObserverThread):
             span_id=self._current_span_id,
             tags={"event": "start", "epoch": str(self._current_epoch)}
         )
-        self.marker_queue.put(marker)
+        self._emit_start(marker)
 
     def manual_end(self) -> None:
         if not self._current_span_id:
@@ -39,7 +51,7 @@ class ManualObserverThread(ObserverThread):
             span_id=self._current_span_id,
             tags={"event": "end", "epoch": str(self._current_epoch)}
         )
-        self.marker_queue.put(marker)
+        self._emit_stop(marker)
         self._current_span_id = None
 
     def run(self) -> None:

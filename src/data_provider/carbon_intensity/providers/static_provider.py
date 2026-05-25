@@ -17,7 +17,7 @@ class StaticProvider(DataProvider[IntensityMeasurementData]):
         return IntensityMeasurementData(
             timestamp=datetime.now(),
             location=self.location.location,
-            intensity=self.intensity_value,
+            carbon_intensity=self.intensity_value,
             is_prediction=False
         )
 

@@ -6,7 +6,8 @@ from enum import Enum
 from pydantic.dataclasses import dataclass
 from pydantic import ConfigDict
 from src.data_provider.data_provider import TData 
-
+from src.core.markers import Marker
+from src.core.stats import EventStatsData, SessionStatsData
 class LogSeverity(str, Enum):
     DEBUG = "DEBUG"
     INFO = "INFO"
@@ -41,9 +42,12 @@ class EventStats(TrackerEvent):
     span_id: str
     started_at: datetime
     ended_at: datetime
-    data: Dict[str,Any]
+    stats: EventStatsData
     
-    
+@dataclass(frozen=True)
+class SessionCurrentStatsEvent(TrackerEvent):
+    timestamp: datetime
+    stats: SessionStatsData
 @dataclass(frozen=True)
 class PredictionEvent(TrackerEvent):    
     created_at: datetime 

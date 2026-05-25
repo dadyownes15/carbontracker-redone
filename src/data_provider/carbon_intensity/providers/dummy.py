@@ -50,6 +50,6 @@ class DummyForecaster(DataProvider[IntensityMeasurementData]):
         return IntensityMeasurementData(
             timestamp=time,
             location=self.location,
-            intensity=round(current_intensity, 2),
+            carbon_intensity=round(current_intensity, 2) + random.uniform(-10.0, 10.0),
             is_prediction=is_prediction
         )

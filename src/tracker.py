@@ -1,11 +1,9 @@
-
-
-
 import logging
 from queue import Queue
 import threading
+from threading import Event
 from src.core.config import SessionConfig, ProviderType
-from src.core.handler_thread import HandlerThread
+from src.core.aggregator_thread import AggregatorThread
 from src.observer.factory import observer_factory
 from src.core.terminal_output_thread import TerminalOutputThread
 from src.core.file_logger_thread import FileLoggerThread
@@ -107,46 +105,36 @@ class CarbonTracker:
                     sim_gpu_util=sim_gpu_util
                 )
         
-        # Queue
-        self.marker_queue = Queue(maxsize=100)
-        
+        # Queues
+        self.aggregation_queue = Queue()
         self.terminal_queue = Queue()
         self.logger_queue = Queue()
         self.event_sink = [self.terminal_queue, self.logger_queue]
         
         self._setup_logging()
         
-        # Separate, statically typed measurement storage lists
-        self.power_measurements = []
-        self.intensity_measurements = []
-        
-        # Load provider threads via factory
+        # Build provider threads with shared trigger events
         self.provider_threads = []
+        self.provider_trigger_events = []
+        
         for p_config in self.session_config.provider_configs:
-            if p_config.provider_type == ProviderType.POWER:
-                self.provider_threads.append(
-                    provider_factory(p_config, self.power_measurements)
-                )
-            elif p_config.provider_type == ProviderType.INTENSITY:
-                self.provider_threads.append(
-                    provider_factory(p_config, self.intensity_measurements)
-                )
-                
-        # self.guard_thread = create_guard_thread(session_config) 
+            trigger = Event()
+            self.provider_trigger_events.append(trigger)
+            self.provider_threads.append(
+                provider_factory(p_config, self.aggregation_queue, trigger)
+            )
         
         self.observer_thread = observer_factory(
             config=self.session_config.observer_config,
-            marker_queue=self.marker_queue
+            aggregation_queue=self.aggregation_queue,
+            event_sink=self.event_sink,
+            notify_events=self.provider_trigger_events
         )
         
-        
-        self.handler_thread = HandlerThread(
-            marker_queue= self.marker_queue,
-            event_sink = self.event_sink,
-            session_config = self.session_config,
-            provider_threads = self.provider_threads,
-            power_measurements = self.power_measurements,
-            intensity_measurements = self.intensity_measurements,
+        self.aggregator_thread = AggregatorThread(
+            session_config=self.session_config,
+            aggregation_queue=self.aggregation_queue,
+            event_sink=self.event_sink,
         )
         
         self.terminal_thread = TerminalOutputThread(
@@ -158,11 +146,16 @@ class CarbonTracker:
             event_queue=self.logger_queue
         )
         
-        self.threads = [self.observer_thread, self.terminal_thread, self.logger_thread, *self.provider_threads, self.handler_thread]
+        self.threads = [
+            self.observer_thread, 
+            self.terminal_thread, 
+            self.logger_thread, 
+            *self.provider_threads, 
+            self.aggregator_thread
+        ]
 
         for thread in self.threads:
             thread.start()
-
 
         print("Active threads list:")
         for thread in threading.enumerate():
@@ -198,4 +191,4 @@ class CarbonTracker:
     def _generate_session_report(self):
         # Fetch the final aggregated data from the writer or tracker state
         # Returns a dataclass/dict with total energy, emissions, duration, etc.
-        pass   
+        pass

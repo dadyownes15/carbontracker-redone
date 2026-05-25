@@ -8,6 +8,9 @@ from src.data_provider.data_provider_thread import DataProviderThread, TData
 from src.data_provider.carbon_intensity.intensity_provider import IntensityMeasurementData
 from src.data_provider.carbon_intensity.factory import create_intensity_thread
 from src.data_provider.power.power_provider import PowerMeasurementConfig, PowerMeasurementData
+from src.core.events import TrackerEvent
+import queue
+from threading import Event
 
 from src.data_provider.power.providers.cpu.sim_cpu import SimulatedCPUProvider
 from src.data_provider.power.providers.gpu.sim_gpu import SimulatedGPUProvider
@@ -21,7 +24,7 @@ from src.core.config import RealPowerMeasurementConfig, SimulatedPowerMeasuremen
 logger = logging.getLogger("carbontracker.power_factory")
 
 # --- Factory Creation Dispatcher ---
-def create_power_thread(config: PowerMeasurementConfig, power_measurements: List[PowerMeasurementData]) -> DataProviderThread[PowerMeasurementData]:
+def create_power_thread(config: PowerMeasurementConfig, aggregation_queue: "queue.Queue[TrackerEvent]", notify_event: Event) -> DataProviderThread[PowerMeasurementData]:
     if isinstance(config, SimulatedPowerMeasurementConfig):
         providers = []
         for comp in config.simulated_components:
@@ -30,7 +33,7 @@ def create_power_thread(config: PowerMeasurementConfig, power_measurements: List
             else:
                 providers.append(SimulatedGPUProvider(comp.name, comp.power_draw_w))
                 
-        return DataProviderThread(config.sample_interval, providers, power_measurements)
+        return DataProviderThread(config.sample_interval, providers, aggregation_queue, notify_event)
 
     if isinstance(config, RealPowerMeasurementConfig):
         providers = []
@@ -62,7 +65,7 @@ def create_power_thread(config: PowerMeasurementConfig, power_measurements: List
             if gpu_provider:
                 providers.append(gpu_provider)
 
-        return DataProviderThread(config.sample_interval, providers, power_measurements)
+        return DataProviderThread(config.sample_interval, providers, aggregation_queue, notify_event)
         
     else:
         raise ValueError("Unrecognized method detected in power provider thread creation")
@@ -70,12 +73,12 @@ def create_power_thread(config: PowerMeasurementConfig, power_measurements: List
 
 # create_intensity_thread is now imported from src.data_provider.carbon_intensity.factory
 
-def provider_factory(config: ProviderConfig, measurements: List[TData]) -> DataProviderThread[TData]:
+def provider_factory(config: ProviderConfig, aggregation_queue: "queue.Queue[TrackerEvent]", notify_event: Event) -> DataProviderThread[TData]:
     prov_type = config.provider_type
 
     if prov_type == ProviderType.INTENSITY:
-        return create_intensity_thread(config=config, intensity_measurements=measurements)
+        return create_intensity_thread(config=config, aggregation_queue=aggregation_queue, notify_event=notify_event)
     elif prov_type == ProviderType.POWER:
-        return create_power_thread(config=config, power_measurements=measurements)
+        return create_power_thread(config=config, aggregation_queue=aggregation_queue, notify_event=notify_event)
     else:
         raise ValueError("Unknown provider type")

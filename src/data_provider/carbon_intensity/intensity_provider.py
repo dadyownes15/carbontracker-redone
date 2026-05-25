@@ -41,8 +41,8 @@ class ResolvedLocation:
 
 @dataclass(frozen=True)
 class IntensityMeasurementData(MeasurementData):
-    location: Location
-    intensity: float                # usually Co2eq g / kwh
+    location: Optional[Location]
+    carbon_intensity: float                # usually Co2eq g / kwh
     is_prediction: bool
 
 @dataclass(frozen=True)

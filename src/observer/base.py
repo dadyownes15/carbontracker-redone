@@ -1,11 +1,21 @@
 import queue
 from threading import Event, Thread
+from typing import List
 from src.core.markers import Marker
+from src.core.events import TrackerEvent, EventStart, EventStop
 
 class ObserverThread(Thread):
-    def __init__(self, marker_queue: "queue.Queue[Marker]", name: str) -> None:
+    def __init__(
+        self, 
+        aggregation_queue: "queue.Queue[TrackerEvent]",
+        event_sink: "List[queue.Queue[TrackerEvent]]",
+        notify_events: List[Event],
+        name: str
+    ) -> None:
         super().__init__()
-        self.marker_queue = marker_queue
+        self.aggregation_queue = aggregation_queue
+        self.event_sink = event_sink
+        self.notify_events = notify_events
         self._stop_event = Event()
         self.daemon = True
         self.name = name + "observer"
@@ -15,3 +25,21 @@ class ObserverThread(Thread):
 
     def run(self) -> None:
         raise NotImplementedError("Subclasses must implement run()")
+
+    def _emit_start(self, marker: Marker) -> None:
+        """Helper for subclasses to emit start events and trigger providers."""
+        event = EventStart(started_at=marker.timestamp, span_id=marker.span_id)
+        self.aggregation_queue.put(event)
+        for sink in self.event_sink:
+            sink.put(event)
+            
+        # Wake up data providers for a snapshot at the boundary
+        for ne in self.notify_events:
+            ne.set()
+
+    def _emit_stop(self, marker: Marker) -> None:
+        """Helper for subclasses to emit stop events. DOES NOT trigger providers."""
+        event = EventStop(ended_at=marker.timestamp, span_id=marker.span_id)
+        self.aggregation_queue.put(event)
+        for sink in self.event_sink:
+            sink.put(event)

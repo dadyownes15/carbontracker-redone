@@ -55,12 +55,11 @@ class ElectricityMapsProvider(DataProvider[IntensityMeasurementData]):
             with urllib.request.urlopen(req, timeout=10.0) as response:
                 if response.status == 200:
                     payload = json.loads(response.read().decode('utf-8'))
-                    intensity = float(payload.get('carbonIntensity', 0.0))
                     
                     return IntensityMeasurementData(
                         timestamp=datetime.now(),
                         location=self.location.location,
-                        intensity=intensity,
+                        carbon_intensity=payload.get('carbonIntensity'),
                         is_prediction=False
                     )
                 else:
