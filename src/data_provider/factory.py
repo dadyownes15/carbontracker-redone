@@ -3,11 +3,11 @@ from typing import List
 
 from src.core.exceptions import ProviderUnavailableError, ProviderPermissionError
 
-from src.core.config import ProviderConfig, IntensityMeasurementConfig, ProviderType
+from src.core.config import ProviderConfig, PowerMeasurementConfig, ProviderType
 from src.data_provider.data_provider_thread import DataProviderThread, TData
 from src.data_provider.carbon_intensity.intensity_provider import IntensityMeasurementData
 from src.data_provider.carbon_intensity.factory import create_intensity_thread
-from src.data_provider.power.power_provider import PowerMeasurementConfig, PowerMeasurementData
+from src.data_provider.power.power_provider import PowerMeasurementData
 from src.core.events import TrackerEvent
 import queue
 from threading import Event
@@ -27,6 +27,7 @@ logger = logging.getLogger("carbontracker.power_factory")
 
 # --- Factory Creation Dispatcher ---
 def create_power_thread(config: PowerMeasurementConfig, aggregation_queue: "queue.Queue[TrackerEvent]", notify_event: Event) -> DataProviderThread[PowerMeasurementData]:
+    print("Creating a prower thread")
     if isinstance(config, SimulatedPowerMeasurementConfig):
         providers = []
         for comp in config.simulated_components:
@@ -76,12 +77,13 @@ def create_power_thread(config: PowerMeasurementConfig, aggregation_queue: "queu
         # Print the resolution log
         for step in steps:
             if step.level == "success":
-                logger.info(f"✓ {step.detail}")
+                logger.info(f"{step.detail}")
             elif step.level == "warning":
-                logger.warning(f"⚠ {step.detail}")
+                logger.warning(f" {step.detail}")
             else:
-                logger.info(f"ℹ {step.detail}")
+                logger.info(f"{step.detail}")
 
+        print("Total providers: ", len(providers))
         return DataProviderThread(config.sample_interval, providers, aggregation_queue, notify_event)
         
     else:

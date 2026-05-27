@@ -28,7 +28,7 @@ class FileLoggerThread(Thread):
         self.run_name = run_name
         self.event_queue = event_queue
         self.name = "File Logger Thread"
-        
+       
         # Making it a daemon thread ensures it automatically shuts down 
         # when your main application exits
         self.daemon = True

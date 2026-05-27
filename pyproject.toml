@@ -4,16 +4,14 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "pydantic>=2.13.4",
-]
-
+dependencies = ["pydantic>=2.13.4"]
 
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
 
 [tool.uv.workspace]
-members = [
-    "carbontracker",
-]
+members = ["carbontracker"]
+
+[project.scripts]
+carbontracker = "carbontracker.cli:main"

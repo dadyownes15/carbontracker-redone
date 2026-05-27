@@ -25,18 +25,24 @@ class ProviderConfig(BaseModel):
     provider_type: ProviderType
     sample_interval: float = 60.0
 
+
 class RealPowerMeasurementConfig(ProviderConfig):
     provider_type: Literal[ProviderType.POWER] = ProviderType.POWER
     components: List[Literal["cpu", "ram", "gpu"]] = ["cpu", "ram", "gpu"]
     pue: float = 1.1
     devices_by_pids: List[str]
 
+
 class SimulatedPowerMeasurementConfig(ProviderConfig):
     provider_type: Literal[ProviderType.POWER] = ProviderType.POWER
     sample_interval: float = 0.0
     simulated_components: List[SimulatedComponent] = Field(default_factory=list)
 
-PowerMeasurementConfig = Union[RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig]
+
+PowerMeasurementConfig = Union[
+    RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig
+]
+
 
 class IntensityMeasurementConfig(ProviderConfig):
     provider_type: Literal[ProviderType.INTENSITY] = ProviderType.INTENSITY
@@ -58,18 +64,20 @@ class PredictionConfig(BaseModel):
     validate_at_end: bool = False
     forecast_interval_s: Optional[float] = None
 
+
 class SessionMode(str, Enum):
     PYTHON_MANUAL = "python-manual"
     PYTHON_DECORATOR = "python-decorator"
     PROCESS = "process"
-    
+
     @property
     def is_python(self) -> bool:
         return self in (SessionMode.PYTHON_MANUAL, SessionMode.PYTHON_DECORATOR)
-    
+
     @property
     def is_process(self) -> bool:
         return self in (SessionMode.PROCESS,)
+
 
 class ObserverConfig(BaseModel):
     prefix: str = "carbontracker"
@@ -127,7 +135,7 @@ class SessionConfig(BaseModel):
         sim_gpu: Optional[str] = None,
         sim_gpu_watts: Optional[float] = None,
         sim_gpu_util: Optional[float] = None,
-        **kwargs
+        **kwargs,
     ) -> "SessionConfig":
 
         # 1. Parse Components
@@ -136,28 +144,33 @@ class SessionConfig(BaseModel):
             parsed_components = ["cpu", "ram", "gpu"]
         else:
             comp_list = [c.strip().lower() for c in components.split(",")]
-            if "cpu" in comp_list: parsed_components.append("cpu")
-            if "gpu" in comp_list: parsed_components.append("gpu")
-            if "ram" in comp_list: parsed_components.append("ram")
+            if "cpu" in comp_list:
+                parsed_components.append("cpu")
+            if "gpu" in comp_list:
+                parsed_components.append("gpu")
+            if "ram" in comp_list:
+                parsed_components.append("ram")
 
         sim_comps = []
         if sim_cpu and sim_cpu_tdp is not None:
             sim_comps.append(SimulatedComponent(name=sim_cpu, power_draw_w=sim_cpu_tdp))
         if sim_gpu and sim_gpu_watts is not None:
-            sim_comps.append(SimulatedComponent(name=sim_gpu, power_draw_w=sim_gpu_watts))
+            sim_comps.append(
+                SimulatedComponent(name=sim_gpu, power_draw_w=sim_gpu_watts)
+            )
 
         # 2. Build Providers
         power_config = RealPowerMeasurementConfig(
-            sample_interval=float(update_interval),
+            sample_interval=update_interval,
             components=parsed_components,
-            devices_by_pids=[]
+            devices_by_pids=[],
         )
         # TODO: Handle simulated components properly in the legacy bridge if needed
 
         intensity_config = IntensityMeasurementConfig(
             sample_interval=900.0,
             api_keys=api_keys,
-            method="auto" if api_keys else "static"
+            method="auto" if api_keys else "static",
         )
 
         # 3. Build Prediction Config
@@ -166,7 +179,7 @@ class SessionConfig(BaseModel):
             enabled=pred_enabled,
             unit_name="epoch",
             total_units=epochs,  # Total units now lives entirely in prediction context
-            predict_after=epochs_before_pred if pred_enabled else 2
+            predict_after=epochs_before_pred if pred_enabled else 2,
         )
 
         # 4. Observer Config (Incredibly simple now)
@@ -182,11 +195,11 @@ class SessionConfig(BaseModel):
 
         # Map legacy verbose (0, 1, 2) to logging levels
         if verbose == 0:
-            log_level = 30 # logging.WARNING
+            log_level = 30  # logging.WARNING
         elif verbose >= 2:
-            log_level = 10 # logging.DEBUG
+            log_level = 10  # logging.DEBUG
         else:
-            log_level = 20 # logging.INFO
+            log_level = 20  # logging.INFO
 
         return cls(
             mode=SessionMode.PYTHON_MANUAL,
@@ -195,14 +208,12 @@ class SessionConfig(BaseModel):
             ignore_errors=ignore_errors,
             stats_emit_interval_s=5.0,
             project_config=ProjectConfig(
-                name=run_name,
-                api_key_reference="legacy_env",
-                log_dir=resolved_log_dir
+                name=run_name, api_key_reference="legacy_env", log_dir=resolved_log_dir
             ),
             provider_configs=[power_config, intensity_config],
             observer_config=observer_config,
             prediction_config=prediction_config,
             budget_policy=None,
             forecast_budget_policy=forecast_budget_policy,
-            log_level=log_level
+            log_level=log_level,
         )

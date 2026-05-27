@@ -3,17 +3,18 @@ from threading import Thread
 import sys
 import logging
 
-from src.core.events import TrackerEvent, DiagnosticEvent, LogSeverity
+from src.core.events import MeasurementEvent, TrackerEvent, DiagnosticEvent, LogSeverity
 from src.core.utils import SEVERITY_MAP
 
+
 class TerminalOutputThread(Thread):
-    def __init__(self, log_level: int, event_queue: Queue[TrackerEvent]): 
+    def __init__(self, : int, event_queue: Queue[TrackerEvent]):
         super().__init__()
         self.log_level = log_level
         self.event_queue = event_queue
         self.name = "Terminal Output Thread"
-        
-        # Making it a daemon thread ensures it automatically shuts down 
+
+        # Making it a daemon thread ensures it automatically shuts down
         # when your main application exits
         self.daemon = True
 
@@ -29,12 +30,18 @@ class TerminalOutputThread(Thread):
             if event is None:
                 self.event_queue.task_done()
                 break
-                
+
             if isinstance(event, DiagnosticEvent):
                 event_level = SEVERITY_MAP.get(event.severity, logging.INFO)
                 if event_level >= self.log_level:
-                    if event.severity in [LogSeverity.WARNING, LogSeverity.ERROR, LogSeverity.CRITICAL]:
-                        print(f"[{event.severity.value}] {event.message}", file=sys.stderr)
+                    if event.severity in [
+                        LogSeverity.WARNING,
+                        LogSeverity.ERROR,
+                        LogSeverity.CRITICAL,
+                    ]:
+                        print(
+                            f"[{event.severity.value}] {event.message}", file=sys.stderr
+                        )
                     elif event.severity == LogSeverity.INFO:
                         print(f"[INFO] {event.message}")
                     elif event.severity == LogSeverity.DEBUG:
@@ -42,7 +49,7 @@ class TerminalOutputThread(Thread):
             else:
                 # Print out other events only if verbosity allows
                 if self.log_level <= logging.INFO:
-                    print(f"[TerminalOutputThread] Processing Event: {type(event).__name__}")
-            
+                    print(f"[Carbontracker] Processing Event: {type(event).__name__}")
+
             # Tell the queue that processing for this item is complete
             self.event_queue.task_done()
