@@ -2,7 +2,7 @@ import pytest
 from src.core.config import IntensityMeasurementConfig
 from src.providers.carbon_intensity.location import resolve_location, location_to_country
 from src.core.config import (
-    CountryCode, GridZone, CloudRegion, GeoLocation
+    CountryCode, GridZone, CloudRegion, GeoLocation, Location
 )
 from src.providers.carbon_intensity.factory import resolve_intensity_provider
 from src.providers.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
@@ -46,7 +46,7 @@ def test_location_to_country():
 def test_factory_electricity_maps():
     config = IntensityMeasurementConfig(
         method="electricityMaps",
-        location="DK",
+        location=Location(data=CountryCode(country_code="DK")),
         api_keys={"electricityMaps": "test-key"}
     )
     resolution = resolve_intensity_provider(config)
@@ -67,7 +67,7 @@ def test_factory_auto_fallback_to_country():
     # No API key, but location provided (auto method)
     config = IntensityMeasurementConfig(
         method="auto",
-        location="DK",
+        location=Location(data=CountryCode(country_code="DK")),
         api_keys=None
     )
     resolution = resolve_intensity_provider(config)

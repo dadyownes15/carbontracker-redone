@@ -31,11 +31,18 @@ def geolocate_by_ip() -> Optional[GeoLocation]:
     
     return None
 
-def resolve_location(raw_location: Optional[str], auto_detect: bool = True) -> ResolvedLocation:
+def resolve_location(raw_location: Optional[str | Location], auto_detect: bool = True) -> ResolvedLocation:
     """
-    Parses a raw location string into a concrete Location object.
+    Parses a raw location string into a concrete Location object, or returns the location if it's already a Location object.
     If raw_location is None and auto_detect is True, attempts IP geolocation.
     """
+    if isinstance(raw_location, Location):
+        return ResolvedLocation(
+            location=raw_location,
+            source="config",
+            raw_input=str(raw_location)
+        )
+        
     if raw_location:
         raw = raw_location.strip()
         
