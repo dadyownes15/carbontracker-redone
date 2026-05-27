@@ -1,15 +1,14 @@
 import time
 import logging
 from src.entrypoints.programmatic.manual import CarbonTracker
-from src.core.config import SessionMode
+from src.core.types import Component
 
 def main():
     tracker = CarbonTracker(
         epochs=1,
-        components="cpu",
+        components=[Component.CPU],
         log_dir="./test_logs",
-        log_file_prefix="test",
-        verbose=1
+        project_name="test"
     )
     
     tracker.epoch_start()

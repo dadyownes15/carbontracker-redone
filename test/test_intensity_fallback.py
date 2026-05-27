@@ -1,7 +1,7 @@
 import pytest
-from src.core.config import IntensityMeasurementConfig
+from src.config.config import SessionConfig, SessionMode
 from src.providers.carbon_intensity.location import resolve_location, location_to_country
-from src.core.config import (
+from src.core.types import (
     CountryCode, GridZone, CloudRegion, GeoLocation, Location
 )
 from src.providers.carbon_intensity.factory import resolve_intensity_provider
@@ -14,25 +14,25 @@ def test_resolve_location_parsing():
     # Country Code
     res = resolve_location("DK", auto_detect=False)
     assert res.source == "config"
-    assert isinstance(res.location.data, CountryCode)
-    assert res.location.data.country_code == "DK"
+    assert isinstance(res.location, CountryCode)
+    assert res.location.country_code == "DK"
     
     # Grid Zone
     res = resolve_location("DK-DK1", auto_detect=False)
-    assert isinstance(res.location.data, GridZone)
-    assert res.location.data.zone_id == "DK-DK1"
+    assert isinstance(res.location, GridZone)
+    assert res.location.zone_id == "DK-DK1"
     
     # Cloud Region
     res = resolve_location("aws:eu-west-1", auto_detect=False)
-    assert isinstance(res.location.data, CloudRegion)
-    assert res.location.data.provider == "aws"
-    assert res.location.data.region == "eu-west-1"
+    assert isinstance(res.location, CloudRegion)
+    assert res.location.provider == "aws"
+    assert res.location.region == "eu-west-1"
     
     # Lat/Lon
     res = resolve_location("55.67, 12.56", auto_detect=False)
-    assert isinstance(res.location.data, GeoLocation)
-    assert res.location.data.latitude == 55.67
-    assert res.location.data.longitude == 12.56
+    assert isinstance(res.location, GeoLocation)
+    assert res.location.latitude == 55.67
+    assert res.location.longitude == 12.56
 
 def test_location_to_country():
     # Cloud region fallback
@@ -44,9 +44,11 @@ def test_location_to_country():
     assert location_to_country(res.location) == "DK"
 
 def test_factory_electricity_maps():
-    config = IntensityMeasurementConfig(
-        method="electricityMaps",
-        location=Location(data=CountryCode(country_code="DK")),
+    config = SessionConfig(
+        mode=SessionMode.PYTHON_API,
+        run_name="test",
+        intensity_method="electricityMaps",
+        location=CountryCode(country_code="DK"),
         api_keys={"electricityMaps": "test-key"}
     )
     resolution = resolve_intensity_provider(config)
@@ -54,8 +56,10 @@ def test_factory_electricity_maps():
     assert resolution.provider.api_key == "test-key"
 
 def test_factory_static_override():
-    config = IntensityMeasurementConfig(
-        method="static",
+    config = SessionConfig(
+        mode=SessionMode.PYTHON_API,
+        run_name="test",
+        intensity_method="static",
         static_carbon_intensity_g_per_kwh=123.4
     )
     resolution = resolve_intensity_provider(config)
@@ -65,9 +69,11 @@ def test_factory_static_override():
 
 def test_factory_auto_fallback_to_country():
     # No API key, but location provided (auto method)
-    config = IntensityMeasurementConfig(
-        method="auto",
-        location=Location(data=CountryCode(country_code="DK")),
+    config = SessionConfig(
+        mode=SessionMode.PYTHON_API,
+        run_name="test",
+        intensity_method="auto",
+        location=CountryCode(country_code="DK"),
         api_keys=None
     )
     resolution = resolve_intensity_provider(config)
@@ -76,8 +82,10 @@ def test_factory_auto_fallback_to_country():
 
 def test_factory_auto_fallback_to_global():
     # No API key, no location, auto_detect false
-    config = IntensityMeasurementConfig(
-        method="auto",
+    config = SessionConfig(
+        mode=SessionMode.PYTHON_API,
+        run_name="test",
+        intensity_method="auto",
         location=None,
         auto_detect_location=False
     )

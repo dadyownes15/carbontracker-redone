@@ -1,0 +1,29 @@
+2026-05-27 17:46:28,785 - MainThread - WARNING - No API keys provided. Skipping intensity provider initialization.
+2026-05-27 17:46:28,788 - MainThread - DEBUG - Geolocation fetch failed: <[ERROR - HTTPConnectionPool(host='ipinfo.io', port=80): Max retries exceeded with url: /json (Caused by NameResolutionError("<urllib3.connection.HTTPConnection object at 0x14443aab0>: Failed to resolve 'ipinfo.io' ([Errno 8] nodename nor servname provided, or not known)"))] Ipinfo - Geocode [empty]>
+2026-05-27 17:46:28,788 - MainThread - WARNING - No carbon intensity provider specified and no location detected. Defaulting to global average carbon intensity for 2024: 445.00 gCO2eq/kWh.
+2026-05-27 17:46:28,800 - CarbonTrackerThread - CRITICAL - Traceback (most recent call last):
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/site-packages/carbontracker/tracker.py", line 138, in run
+    self._collect_measurements()
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/site-packages/carbontracker/tracker.py", line 225, in _collect_measurements
+    comp.collect_power_usage(self.epoch_counter)
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/site-packages/carbontracker/components/component.py", line 159, in collect_power_usage
+    self.power_usages[-1] += self.handler.power_usage()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/site-packages/carbontracker/components/apple_silicon/powermetrics.py", line 81, in power_usage
+    output = PowerMetricsUnified.get_output()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/site-packages/carbontracker/components/apple_silicon/powermetrics.py", line 20, in get_output
+    PowerMetricsUnified._output = subprocess.check_output(
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/subprocess.py", line 466, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/subprocess.py", line 548, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/Users/mikkeldahl/.pyenv/versions/3.12.2/lib/python3.12/subprocess.py", line 1953, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+PermissionError: [Errno 1] Operation not permitted: 'sudo'
+

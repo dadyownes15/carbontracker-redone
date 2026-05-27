@@ -36,7 +36,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
     Parses a raw location string into a concrete Location object, or returns the location if it's already a Location object.
     If raw_location is None and auto_detect is True, attempts IP geolocation.
     """
-    if isinstance(raw_location, Location):
+    if isinstance(raw_location, (GeoLocation, CloudRegion, GridZone, CountryCode)):
         return ResolvedLocation(
             location=raw_location,
             source="config",
@@ -54,7 +54,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
                     lat = float(parts[0].strip())
                     lon = float(parts[1].strip())
                     return ResolvedLocation(
-                        location=Location(data=GeoLocation(latitude=lat, longitude=lon)),
+                        location=GeoLocation(latitude=lat, longitude=lon),
                         source="config",
                         raw_input=raw_location
                     )
@@ -68,7 +68,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
                 provider = parts[0].strip().lower()
                 region = parts[1].strip().lower()
                 return ResolvedLocation(
-                    location=Location(data=CloudRegion(provider=provider, region=region)),
+                    location=CloudRegion(provider=provider, region=region),
                     source="config",
                     raw_input=raw_location
                 )
@@ -77,7 +77,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
         if '-' in raw:
             # Assuming anything with a hyphen that didn't match above is a grid zone
             return ResolvedLocation(
-                location=Location(data=GridZone(zone_id=raw.upper())),
+                location=GridZone(zone_id=raw.upper()),
                 source="config",
                 raw_input=raw_location
             )
@@ -86,7 +86,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
         # Ensure it's a 2-letter code if possible, but allow others for now
         if len(raw) == 2:
             return ResolvedLocation(
-                location=Location(data=CountryCode(country_code=raw.upper())),
+                location=CountryCode(country_code=raw.upper()),
                 source="config",
                 raw_input=raw_location
             )
@@ -94,7 +94,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
         # Default fallback if format is unrecognized but provided (treat as CountryCode or unknown)
         # We will wrap it in CountryCode and let the fallback chain deal with it.
         return ResolvedLocation(
-            location=Location(data=CountryCode(country_code=raw.upper())),
+            location=CountryCode(country_code=raw.upper()),
             source="config",
             raw_input=raw_location
         )
@@ -104,7 +104,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
         geo = geolocate_by_ip()
         if geo:
             return ResolvedLocation(
-                location=Location(data=geo),
+                location=geo,
                 source="geolocation",
                 raw_input=None
             )
@@ -118,17 +118,16 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
 
 def location_to_country(loc: Location) -> Optional[str]:
     """Helper to try to extract a country code from any Location type."""
-    data = loc.data
-    if isinstance(data, CountryCode):
-        return data.country_code
-    elif isinstance(data, GridZone):
+    if isinstance(loc, CountryCode):
+        return loc.country_code
+    elif isinstance(loc, GridZone):
         # Many grid zones start with the country code (e.g., DK-DK1 -> DK)
-        if '-' in data.zone_id:
-            country = data.zone_id.split('-')[0]
+        if '-' in loc.zone_id:
+            country = loc.zone_id.split('-')[0]
             if len(country) == 2:
                 return country
-    elif isinstance(data, CloudRegion):
-        key = f"{data.provider}:{data.region}"
+    elif isinstance(loc, CloudRegion):
+        key = f"{loc.provider}:{loc.region}"
         return CLOUD_REGION_TO_COUNTRY.get(key)
     # Note: GeoLocation reverse geocoding is omitted here for simplicity,
     # it would require an offline database or an API call.

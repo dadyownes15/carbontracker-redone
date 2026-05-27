@@ -1,9 +1,15 @@
 import time
 from src.entrypoints.programmatic.manual import CarbonTracker
+from src.core.types import Component
+
 def main():
     print("Initializing CarbonTracker...")
-    # This automatically creates a ManualObserver and necessary DummyProviders
-    tracker = CarbonTracker(epochs=2)
+    tracker = CarbonTracker(
+        epochs=2,
+        components=[Component.CPU],
+        pue=1.2,
+        log_dir="./carbontracker_logs/"
+    )
 
     for epoch in range(2):
         print(f"\n--- Starting Epoch {epoch} ---")

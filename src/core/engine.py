@@ -14,7 +14,8 @@ from src.reporters.logging_handler import EventQueueLogHandler
 from src.reporters.terminal import TerminalOutputThread
 from src.providers.data_provider import MeasurementData
 from src.providers.base import DataProviderThread
-from src.providers.factory import provider_factory
+from src.providers.factory import create_power_thread
+from src.providers.carbon_intensity.factory import create_intensity_thread
 from src.providers.power.power_provider import PowerMeasurementData
 from src.observers.base import ObserverThread
 from src.observers.factory import observer_factory
@@ -34,7 +35,7 @@ class CarbonTrackerEngine:
         self.session_config: SessionConfig = session_config
 
         #Unimplemented modes:
-        missing_modes: list[SessionMode] = [SessionMode.PYTHON_DECORATOR, SessionMode.SLURM,SessionMode.SUBPROCESS]
+        missing_modes: list[SessionMode] = [SessionMode.PYTHON_DECORATOR, SessionMode.SLURM]
         if self.session_config.mode in missing_modes:
             raise ValueError(f"{self.session_config.mode} is not implemented")
 
@@ -55,20 +56,31 @@ class CarbonTrackerEngine:
         ] = []
         self.provider_trigger_events: list[Event] = []
 
-        for p_config in self.session_config.provider_configs:
-            trigger: Event = Event()
-            self.provider_trigger_events.append(trigger)
-            self.provider_threads.append(
-                provider_factory(
-                    aggregation_queue=self.aggregation_queue,
-                    config=p_config,
-                    notify_event=trigger,
-                )
+        # Power Provider
+        power_trigger = Event()
+        self.provider_trigger_events.append(power_trigger)
+        self.provider_threads.append(
+            create_power_thread(
+                config=self.session_config,
+                aggregation_queue=self.aggregation_queue,
+                notify_event=power_trigger,
             )
+        )
+
+        # Intensity Provider
+        intensity_trigger = Event()
+        self.provider_trigger_events.append(intensity_trigger)
+        self.provider_threads.append(
+            create_intensity_thread(
+                config=self.session_config,
+                aggregation_queue=self.aggregation_queue,
+                notify_event=intensity_trigger,
+            )
+        )
 
         self.observer_thread: ObserverThread = observer_factory(
-            config=self.session_config.observer_config,
             mode=self.session_config.mode,
+            command=self.session_config.command,
             aggregation_queue=self.aggregation_queue,
             event_sink=self.event_sink,
             notify_events=self.provider_trigger_events,
@@ -82,13 +94,10 @@ class CarbonTrackerEngine:
             # Add proper gaurd callbacks that match the config
             self._guard_verdict = verdict
             self._guard_triggered.set()
-            self.logger.warning("Budget has been violated: ", verdict.reason)
+            self.logger.warning(f"Budget has been violated: {verdict.reason}")
 
         self.aggregator_thread: AggregatorThread = AggregatorThread(
-            prediction_config=self.session_config.prediction_config,
-            budget_policy=self.session_config.budget_policy,
-            stats_emit_interval_s=self.session_config.session_stat_interval_s,
-            mode=self.session_config.mode,
+            session_config=self.session_config,
             aggregation_queue=self.aggregation_queue,
             event_sink=self.event_sink,
             guard_callback=_default_guard_callback
@@ -154,12 +163,12 @@ class CarbonTrackerEngine:
         for thread in self.threads:
             result = thread.stop()
             if isinstance(thread, AggregatorThread):
-                final_stats: FinishedSession = result
+                final_stats = result
             thread.join()
 
         for thread in threading.enumerate():
             self.logger.debug(
-                "f - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}"
+                f" - Name: {thread.name}, ID: {thread.native_id}, Daemon: {thread.daemon}"
             )
 
         return final_stats

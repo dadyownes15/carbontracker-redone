@@ -2,14 +2,15 @@ import queue
 from typing import Dict, Callable, List
 from threading import Event
 
-from src.config.config import ObserverConfig, SessionMode
+from src.config.config import SessionMode
 from src.core.events import TrackerEvent
 from src.observers.base import ObserverThread
 from src.observers.providers.manual import ManualObserverThread
+from src.observers.providers.subprocess import SubprocessObserverThread
 
 def observer_factory(
-    config: ObserverConfig, 
     mode: SessionMode,
+    command: List[str] | None,
     aggregation_queue: "queue.Queue[TrackerEvent]",
     event_sink: "List[queue.Queue[TrackerEvent]]",
     notify_events: List[Event]
@@ -20,9 +21,8 @@ def observer_factory(
     elif mode == SessionMode.PYTHON_DECORATOR:
         raise NotImplementedError("python-decorator mode is not yet implemented")
     elif mode == SessionMode.SUBPROCESS:
-        raise NotImplementedError("subprocess mode is not yet implemented")
+        if command is None:
+            raise ValueError("Command is required for SUBPROCESS mode")
+        return SubprocessObserverThread(command, aggregation_queue, event_sink, notify_events)
     else:
         raise ValueError(f"Unknown observer mode: {mode}")
-
-
-

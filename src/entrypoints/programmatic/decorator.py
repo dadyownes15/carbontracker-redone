@@ -1,32 +1,59 @@
 import functools
+import time
+from typing import Callable
 
-from src.config.default_config import TrackDefaults
-from src.config.config_manager import resolve_config
-from src.config.compiler import compile_session_config
-from src.config.config import SessionMode
+from src.config.config import SessionMode, SessionConfig
+from src.config.config_manager import resolve_overrides
 from src.core.engine import CarbonTrackerEngine
+from src.core.types import Component, Location, IntensityMethod, BreachAction
 
 
-def track(config: TrackDefaults | None = None, **overrides):
+def _generate_default_name() -> str:
+    return f"run_{int(time.time())}"
+
+
+def track(
+    *,
+    project_name: str | None = None,
+    log_dir: str | None = None,
+    ignore_errors: bool | None = None,
+    components: list[Component] | None = None,
+    pue: float | None = None,
+    location: Location | None = None,
+    intensity_method: IntensityMethod | None = None,
+    static_carbon_intensity_g_per_kwh: float | None = None,
+    power_sampling_interval: float | None = None,
+    intensity_sampling_interval: float | None = None,
+    predict_after: int | None = None,
+    predict_interval: float | None = None,
+    total_units: int | None = None,
+    unit_name: str | None = None,
+    max_energy_kwh: float | None = None,
+    max_emissions_g: float | None = None,
+    use_predicted_values: bool | None = None,
+    action_on_breach: BreachAction | None = None,
+    on_breach_callback: Callable | None = None,
+):
     """
     Decorator to track the carbon footprint of a function.
-
-    Accepts a TrackDefaults config or keyword overrides.
-    See TrackDefaults for the full list of configurable fields.
     """
+    user_kwargs = {k: v for k, v in locals().items() if v is not None}
+    
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            if config is not None:
-                effective = config.model_copy(update=overrides)
+            overrides = resolve_overrides(**user_kwargs)
+            
+            if "project_name" in overrides:
+                overrides["run_name"] = overrides.pop("project_name")
             else:
-                effective = TrackDefaults(**overrides)
+                overrides["run_name"] = _generate_default_name()
 
-            resolved = resolve_config(effective)
-            session_config = compile_session_config(
-                resolved, mode=SessionMode.PYTHON_DECORATOR
+            config = SessionConfig(
+                mode=SessionMode.PYTHON_DECORATOR,
+                **overrides
             )
-            engine = CarbonTrackerEngine(session_config)
+            engine = CarbonTrackerEngine(config)
             try:
                 return func(*args, **kwargs)
             finally:

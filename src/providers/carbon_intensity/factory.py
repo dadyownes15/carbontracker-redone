@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional
 
 from src.core.exceptions import ProviderConfigError, APIError
-from src.config.config import IntensityMeasurementConfig
+from src.config.config import SessionConfig
 from src.providers.data_provider import DataProvider
 from src.providers.base import DataProviderThread
 from src.providers.carbon_intensity.intensity_provider import (
@@ -26,7 +26,7 @@ from threading import Event
 from src.core.events import TrackerEvent
 
 def create_intensity_thread(
-    config: IntensityMeasurementConfig,
+    config: SessionConfig,
     aggregation_queue: "queue.Queue[TrackerEvent]",
     notify_event: Event
 ) -> DataProviderThread[IntensityMeasurementData]:
@@ -38,21 +38,22 @@ def create_intensity_thread(
     print_resolution(resolution)
     
     return DataProviderThread(
-        sample_interval=config.sample_interval,
+        sample_interval=config.intensity_sampling_interval,
         providers=[resolution.provider],
         aggregation_queue=aggregation_queue,
         notify_event=notify_event
     )
 
 
-def resolve_intensity_provider(config: IntensityMeasurementConfig) -> IntensityResolution:
+def resolve_intensity_provider(config: SessionConfig) -> IntensityResolution:
     """
     Implements the deterministic fallback chain for intensity providers.
     """
     steps: List[ResolutionStep] = []
     
     # 1. Resolve Location
-    resolved_loc = resolve_location(config.location, config.auto_detect_location)
+    auto_detect = getattr(config, "auto_detect_location", True)
+    resolved_loc = resolve_location(config.location, auto_detect)
     
     if resolved_loc.source == "config":
         steps.append(ResolutionStep(
@@ -61,7 +62,7 @@ def resolve_intensity_provider(config: IntensityMeasurementConfig) -> IntensityR
             level="info"
         ))
     elif resolved_loc.source == "geolocation":
-        loc_data = resolved_loc.location.data
+        loc_data = resolved_loc.location
         steps.append(ResolutionStep(
             action="location_geolocation",
             detail=f"Location detected via IP geolocation: {loc_data.latitude}, {loc_data.longitude}",
@@ -75,7 +76,7 @@ def resolve_intensity_provider(config: IntensityMeasurementConfig) -> IntensityR
         ))
         
     # 2. Select Provider based on Method
-    method = config.method
+    method = config.intensity_method.value if hasattr(config.intensity_method, 'value') else config.intensity_method
     
     if method == "static":
         if config.static_carbon_intensity_g_per_kwh is not None:

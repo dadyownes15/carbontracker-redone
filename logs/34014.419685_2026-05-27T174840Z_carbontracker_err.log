@@ -1,0 +1,4 @@
+2026-05-27 17:48:40,998 - MainThread - WARNING - No API keys provided. Skipping intensity provider initialization.
+2026-05-27 17:48:41,263 - MainThread - WARNING - No carbon intensity provider specified. Using average carbon intensity for DK: 143.30 gCO2eq/kWh.
+2026-05-27 17:48:41,263 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.
+2026-05-27 17:48:41,263 - MainThread - WARNING - Epoch duration is too short for a measurement to be collected.

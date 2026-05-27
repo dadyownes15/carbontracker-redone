@@ -28,7 +28,7 @@ class ObserverThread(Thread):
 
     def _emit_start(self, marker: Marker) -> None:
         """Helper for subclasses to emit start events and trigger providers."""
-        event = EventStart(started_at=marker.timestamp, span_id=marker.span_id)
+        event = EventStart(started_at=marker.timestamp, span_id=marker.span_id, parent_span_id=marker.parent_span_id)
         self.aggregation_queue.put(event)
         for sink in self.event_sink:
             sink.put(event)
@@ -39,7 +39,7 @@ class ObserverThread(Thread):
 
     def _emit_stop(self, marker: Marker) -> None:
         """Helper for subclasses to emit stop events. DOES NOT trigger providers."""
-        event = EventStop(ended_at=marker.timestamp, span_id=marker.span_id)
+        event = EventStop(ended_at=marker.timestamp, span_id=marker.span_id, parent_span_id=marker.parent_span_id)
         self.aggregation_queue.put(event)
         for sink in self.event_sink:
             sink.put(event)

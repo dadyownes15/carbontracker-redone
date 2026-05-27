@@ -4,7 +4,7 @@ from threading import Thread, Event
 from typing import Dict, List, Optional, Callable
 from datetime import datetime
 
-from src.config.config import PredictionConfig, BudgetPolicy, SessionMode
+from src.config.config import SessionConfig, SessionMode
 from src.core.events import (
     TrackerEvent,
     EventStart,
@@ -27,7 +27,6 @@ from src.core.prediction import PredictionEngine, PredictionResult
 from src.core.execution_guard import BudgetGuard, GuardVerdict
 from src.core.emissions_calculations import compute_epoch_stats
 from src.core.events import FinishedSession
-from datetime import datetime
 
 logger = logging.getLogger("carbontracker.aggregator")
 
@@ -35,10 +34,7 @@ logger = logging.getLogger("carbontracker.aggregator")
 class AggregatorThread(Thread):
     def __init__(
         self,
-        prediction_config: PredictionConfig,
-        budget_policy: Optional[BudgetPolicy],
-        stats_emit_interval_s: float,
-        mode: SessionMode,
+        session_config: SessionConfig,
         aggregation_queue: "queue.Queue[TrackerEvent]",
         event_sink: "List[queue.Queue[TrackerEvent]]",
         guard_callback: Optional[Callable[[GuardVerdict], None]] = None,
@@ -46,21 +42,23 @@ class AggregatorThread(Thread):
         super().__init__()
         self.aggregation_queue = aggregation_queue
         self.event_sink = event_sink
-        self._mode = mode
-        self._stats_emit_interval_s = stats_emit_interval_s
+        self._mode = session_config.mode
+        self._stats_emit_interval_s = session_config.session_stat_interval_s
         self._guard_callback = guard_callback
 
         self._predict_after = (
-            prediction_config.predict_after_n_units
-            if prediction_config.enabled
+            session_config.predict_after
+            if session_config.total_units is not None
             else float("inf")
         )
         self._prediction_engine = (
-            PredictionEngine(prediction_config.total_units)
-            if prediction_config.enabled and prediction_config.total_units
+            PredictionEngine(session_config.total_units)
+            if session_config.total_units
             else None
         )
-        self._budget_guard = BudgetGuard(budget_policy) if budget_policy else None
+        
+        has_budget = session_config.max_energy_kwh is not None or session_config.max_emissions_g is not None
+        self._budget_guard = BudgetGuard(session_config) if has_budget else None
         self._session_start_time: Optional[datetime] = None
 
         self._stop_event = Event()

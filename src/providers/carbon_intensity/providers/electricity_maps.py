@@ -23,7 +23,7 @@ class ElectricityMapsProvider(DataProvider[IntensityMeasurementData]):
         # Build query parameters based on location type
         self.query_params = {}
         if location.location:
-            data = location.location.data
+            data = location.location
             if isinstance(data, GridZone):
                 self.query_params['zone'] = data.zone_id
             elif isinstance(data, GeoLocation):

@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -8,7 +7,6 @@ import tomli_w
 from pydantic import BaseModel, Field
 
 from src.core.types import Location
-from src.config.default_config import TrackDefaults
 
 GLOBAL_CONFIG_DIR = Path.home() / ".config" / "carbontracker"
 GLOBAL_CONFIG_FILE = GLOBAL_CONFIG_DIR / "config.toml"
@@ -23,12 +21,6 @@ class GlobalConfig(BaseModel):
     api_keys: Dict[str, str] = Field(default_factory=dict)
     default_location: Optional[Location] = None
     default_pue: Optional[float] = None
-
-
-class ResolvedConfig(BaseModel):
-    """Output of the resolution pipeline: a TrackDefaults + secrets."""
-    defaults: TrackDefaults
-    api_keys: Dict[str, str]
 
 
 def _read_toml(path: Path) -> Dict[str, Any]:
@@ -71,65 +63,45 @@ def load_local_config() -> Dict[str, Any]:
     return _read_toml(LOCAL_CONFIG_FILE)
 
 
-def save_local_config(config: TrackDefaults) -> None:
-    data = config.model_dump(exclude_none=True)
-    _write_toml(LOCAL_CONFIG_FILE, data)
-
-    # Safely append to .gitignore
-    gitignore = Path(".gitignore")
-    if gitignore.exists():
-        content = gitignore.read_text()
-        if ".carbontracker/" not in content and ".carbontracker" not in content:
-            with open(gitignore, "a") as f:
-                f.write("\n# CarbonTracker Local Configuration\n.carbontracker/\n")
-    else:
-        with open(gitignore, "w") as f:
-            f.write("# CarbonTracker Local Configuration\n.carbontracker/\n")
-
-
-def resolve_config(overrides: TrackDefaults) -> ResolvedConfig:
+def resolve_overrides(**user_kwargs: Any) -> Dict[str, Any]:
     """
     Resolution pipeline:
-    1. Base TrackDefaults
-    2. Overlay GlobalConfig (PUE, Location)
-    3. Overlay LocalConfig
-    4. Overlay Env Vars (TODO)
-    5. Overlay overrides (TrackDefaults)
+    1. GlobalConfig (PUE, Location, API Keys)
+    2. LocalConfig
+    3. Env Vars
+    4. User kwargs
+    Returns a flat dictionary that can be passed as **kwargs to SessionConfig.
     """
     global_cfg = load_global_config()
     local_cfg = load_local_config()
 
-    # Create a fresh defaults object
-    defaults = TrackDefaults()
+    overrides: Dict[str, Any] = {}
 
     # 1. Apply Global Config
     if global_cfg.default_pue is not None:
-        defaults.pue = global_cfg.default_pue
+        overrides["pue"] = global_cfg.default_pue
     if global_cfg.default_location is not None:
-        defaults.location = global_cfg.default_location
+        overrides["location"] = global_cfg.default_location
+    if global_cfg.api_keys:
+        overrides["api_keys"] = global_cfg.api_keys
 
     # 2. Apply Local Config
-    if local_cfg:
-        defaults = defaults.model_copy(update=local_cfg)
+    overrides.update(local_cfg)
 
-    # 3. Apply Environment Variables (Example for future)
+    # 3. Apply Environment Variables
     if "CARBONTRACKER_API_KEY" in os.environ:
-        global_cfg.api_keys["electricityMaps"] = os.environ["CARBONTRACKER_API_KEY"]
+        if "api_keys" not in overrides:
+            overrides["api_keys"] = {}
+        overrides["api_keys"]["electricityMaps"] = os.environ["CARBONTRACKER_API_KEY"]
     if "CARBONTRACKER_PUE" in os.environ:
         try:
-            defaults.pue = float(os.environ["CARBONTRACKER_PUE"])
+            overrides["pue"] = float(os.environ["CARBONTRACKER_PUE"])
         except ValueError:
             pass
 
-    # 4. Apply user overrides
-    # We only want to override fields that were explicitly set by the user,
-    # but Pydantic BaseModel doesn't track "is_set". 
-    # Since overrides is passed in fully formed, it acts as the final truth.
-    # However, to merge properly, we should overlay `defaults` with `overrides.model_dump(exclude_unset=True)`.
-    # Wait, `overrides` was instantiated with `TrackDefaults(**kwargs)`, so exclude_unset=True works!
-    merged = defaults.model_copy(update=overrides.model_dump(exclude_unset=True))
+    # 4. Apply user overrides (only non-None / explicitly set)
+    for k, v in user_kwargs.items():
+        if v is not None:
+            overrides[k] = v
 
-    return ResolvedConfig(
-        defaults=merged,
-        api_keys=global_cfg.api_keys
-    )
+    return overrides
