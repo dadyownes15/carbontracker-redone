@@ -7,7 +7,7 @@ from src.providers.carbon_intensity.intensity_provider import (
     IntensityMeasurementData, 
     ResolvedLocation
 )
-from src.core.config import GeoLocation, GridZone, CountryCode
+from src.core.types import GeoLocation, GridZone, CountryCode
 from src.core.exceptions import ProviderConfigError, APIError
 
 class ElectricityMapsProvider(DataProvider[IntensityMeasurementData]):

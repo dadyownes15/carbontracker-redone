@@ -1,6 +1,6 @@
 from typing import Optional, Literal
 from pydantic import BaseModel
-from src.core.config import BudgetPolicy
+from src.config.config import BudgetPolicy
 from src.core.prediction import PredictionResult
 
 class GuardVerdict(BaseModel):

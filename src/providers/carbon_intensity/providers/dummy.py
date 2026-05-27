@@ -4,7 +4,7 @@ from typing import List
 
 # 1. Removed IntensityMeasurement from imports (the provider shouldn't know about the wrapper)
 from src.providers.data_provider import DataProvider
-from src.core.config import Location
+from src.core.types import Location
 from src.providers.carbon_intensity.intensity_provider import IntensityMeasurementData
 
 

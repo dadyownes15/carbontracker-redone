@@ -3,7 +3,7 @@ import urllib.request
 import urllib.error
 from typing import Optional
 
-from src.core.config import Location, GeoLocation, CloudRegion, GridZone, CountryCode
+from src.core.types import Location, GeoLocation, CloudRegion, GridZone, CountryCode
 from src.providers.carbon_intensity.intensity_provider import (
     ResolvedLocation
 )

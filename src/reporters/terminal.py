@@ -3,7 +3,7 @@ from threading import Thread
 import sys
 import logging
 
-from src.core.config import LogLevel
+from src.config.config import LogLevel
 from src.core.events import MeasurementEvent, TrackerEvent, DiagnosticEvent, LogSeverity
 from src.core.utils import SEVERITY_MAP
 
@@ -11,7 +11,9 @@ from src.core.utils import SEVERITY_MAP
 class TerminalOutputThread(Thread):
     def __init__(self, log_level: LogLevel, event_queue: Queue[TrackerEvent]):
         super().__init__()
-        self.log_level: LogLevel = log_level
+        # Convert the string enum to the integer equivalent using logging mapping
+        level_map = logging.getLevelNamesMapping()
+        self.log_level: int = level_map.get(log_level.value.upper(), logging.WARNING)
         self.event_queue: Queue[TrackerEvent] = event_queue
         self.name = "Terminal Output Thread"
 

@@ -5,7 +5,8 @@ from typing import Union, Optional
 from pydantic.dataclasses import dataclass
 from typing_extensions import List
 
-from src.core.config import IntensityMeasurementConfig, Location
+from src.config.config import IntensityMeasurementConfig
+from src.core.types import Location
 from src.providers.data_provider import DataProvider, MeasurementData
 
 

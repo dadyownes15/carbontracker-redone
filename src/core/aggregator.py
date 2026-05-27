@@ -4,7 +4,7 @@ from threading import Thread, Event
 from typing import Dict, List, Optional, Callable
 from datetime import datetime
 
-from src.core.config import PredictionConfig, BudgetPolicy, SessionMode
+from src.config.config import PredictionConfig, BudgetPolicy, SessionMode
 from src.core.events import (
     TrackerEvent,
     EventStart,
@@ -51,7 +51,7 @@ class AggregatorThread(Thread):
         self._guard_callback = guard_callback
 
         self._predict_after = (
-            prediction_config.predict_after
+            prediction_config.predict_after_n_units
             if prediction_config.enabled
             else float("inf")
         )
@@ -235,8 +235,6 @@ class AggregatorThread(Thread):
 
     def _emit_session_stats(self) -> None:
         if (not self._power_measurements) or (not self._intensity_measurements):
-            print(self._power_measurements)
-            print(self._intensity_measurements)
             return
 
         now = datetime.now()

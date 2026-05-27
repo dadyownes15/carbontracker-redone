@@ -1,47 +1,35 @@
-    
-# src/frontend/decorator.py
-
 import functools
-from typing import Optional, List, Callable, Literal
-from src.core.config import SessionConfig, SessionMode, BudgetPolicy
-from src.core.engine import CarbonTrackerEngine  # The renamed internal backend
 
-def track(
-    project_name: str = "default_run",
-    components: List[str] = ["cpu", "gpu", "ram"],
-    budget: Optional[BudgetPolicy] = None,
-    log_dir: str = "./logs",
-    max_intensity: Optional[float] = None,
-    max_energy_kwh: Optional[float] = None,
-    max_emissions_g: Optional[float] = None,
-    max_duration_s: Optional[int] = None,
-    callback_on_trigger: Optional[Callable] = None,
-    action: Literal["log", "stop", "callback"] = "log",
-    patience: int = 2,
-    evalaute_on_forecast: bool = False,
-    # Any other top-level UX arguments...
-):
-    """Decorator to track the carbon footprint of a function."""
-    
+from src.config.default_config import TrackDefaults
+from src.config.config_manager import resolve_config
+from src.config.compiler import compile_session_config
+from src.config.config import SessionMode
+from src.core.engine import CarbonTrackerEngine
+
+
+def track(config: TrackDefaults | None = None, **overrides):
+    """
+    Decorator to track the carbon footprint of a function.
+
+    Accepts a TrackDefaults config or keyword overrides.
+    See TrackDefaults for the full list of configurable fields.
+    """
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            
-            config = SessionConfig.from_frontend_args(
-                mode=SessionMode.PYTHON_DECORATOR,
-                project_name=project_name,
-                components=components,
-                budget_policy=budget,
-                log_dir=log_dir,
+            if config is not None:
+                effective = config.model_copy(update=overrides)
+            else:
+                effective = TrackDefaults(**overrides)
+
+            resolved = resolve_config(effective)
+            session_config = compile_session_config(
+                resolved, mode=SessionMode.PYTHON_DECORATOR
             )
-            
-            engine = CarbonTrackerEngine(config)
-            
+            engine = CarbonTrackerEngine(session_config)
             try:
-                result = func(*args, **kwargs)
-                return result
+                return func(*args, **kwargs)
             finally:
-                final_stats = engine.finish()
-                
+                engine.finish()
         return wrapper
     return decorator

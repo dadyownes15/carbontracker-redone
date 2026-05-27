@@ -1,8 +1,5 @@
 import time
 from src.entrypoints.programmatic.manual import CarbonTracker
-from src.core.config import SessionConfig
-
-
 def main():
     print("Initializing CarbonTracker...")
     # This automatically creates a ManualObserver and necessary DummyProviders

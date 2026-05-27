@@ -3,7 +3,7 @@ from typing import List
 
 from src.core.exceptions import ProviderUnavailableError, ProviderPermissionError
 
-from src.core.config import ProviderConfig, PowerMeasurementConfig, ProviderType
+from src.config.config import ProviderConfig, PowerMeasurementConfig, ProviderType
 from src.providers.base import DataProviderThread, TData
 from src.providers.carbon_intensity.intensity_provider import IntensityMeasurementData
 from src.providers.carbon_intensity.factory import create_intensity_thread
@@ -18,7 +18,7 @@ from src.providers.power.providers.cpu.intel import IntelCPU
 from src.providers.power.providers.cpu.generic import GenericCPU
 from src.providers.power.providers.gpu.nvidia import NvidiaGPU
 from src.providers.power.providers.apple_silicon.powermetrics import AppleSiliconCPU, AppleSiliconGPU, AppleSiliconANE
-from src.core.config import RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig
+from src.config.config import RealPowerMeasurementConfig, SimulatedPowerMeasurementConfig
 
 
 from src.core.resolution import ResolutionStep

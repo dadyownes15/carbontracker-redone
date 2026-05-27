@@ -5,8 +5,8 @@ from threading import Event, Thread
 from typing import Union
 
 from src.core.aggregator import AggregatorThread
-from src.core.config import SessionConfig, SessionMode
-from src.core.events import TrackerEvent
+from src.config.config import SessionConfig, SessionMode
+from src.core.events import FinishedSession, TrackerEvent
 from src.core.exceptions import WrongModeError
 from src.core.execution_guard import GuardVerdict
 from src.reporters.file_logger import FileWriterThread
@@ -31,8 +31,12 @@ class CarbonTrackerEngine:
         session_config: SessionConfig,
     ):
 
-        self._setup_logging()
         self.session_config: SessionConfig = session_config
+
+        #Unimplemented modes:
+        missing_modes: list[SessionMode] = [SessionMode.PYTHON_DECORATOR, SessionMode.SLURM,SessionMode.SUBPROCESS]
+        if self.session_config.mode in missing_modes:
+            raise ValueError(f"{self.session_config.mode} is not implemented")
 
         # Queues
         self.aggregation_queue: Queue[TrackerEvent] = Queue()
@@ -42,6 +46,8 @@ class CarbonTrackerEngine:
             self.terminal_queue,
             self.logger_queue,
         ]
+
+        self._setup_logging()
 
         # Build provider threads with shared trigger events
         self.provider_threads: list[
@@ -119,7 +125,7 @@ class CarbonTrackerEngine:
 
     def _setup_logging(self):
         self.logger = logging.getLogger("carbontracker")
-        self.logger.setLevel(self.session_config.log_level)
+        self.logger.setLevel(self.session_config.log_level.value.upper())
         self.logger.propagate = False
         self.logger.handlers.clear()
 
@@ -142,13 +148,13 @@ class CarbonTrackerEngine:
             )  # using proper exception later
         self.observer_thread.manual_end()
 
-    def finish(self):
+    def finish(self) -> FinishedSession:
         final_stats = None
 
         for thread in self.threads:
             result = thread.stop()
             if isinstance(thread, AggregatorThread):
-                final_stats = result
+                final_stats: FinishedSession = result
             thread.join()
 
         for thread in threading.enumerate():

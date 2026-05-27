@@ -2,7 +2,7 @@ import logging
 from typing import List, Optional
 
 from src.core.exceptions import ProviderConfigError, APIError
-from src.core.config import IntensityMeasurementConfig
+from src.config.config import IntensityMeasurementConfig
 from src.providers.data_provider import DataProvider
 from src.providers.base import DataProviderThread
 from src.providers.carbon_intensity.intensity_provider import (

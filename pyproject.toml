@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["pydantic>=2.13.4"]
+dependencies = [
+    "pydantic>=2.13.4",
+    "tomli>=2.4.1",
+    "tomli-w>=1.2.0",
+]
 
 [tool.pyright]
 venvPath = "."
@@ -14,6 +18,6 @@ venv = ".venv"
 members = ["carbontracker"]
 
 [project.scripts]
-carbontracker = "carbontracker.cli:main"
+carbontracker = "src.entrypoints.cli.cli:main"
 [tool.pytest.ini_options]
 pythonpath = ["."]
