@@ -4,8 +4,8 @@ from typing import List, Tuple
 from datetime import datetime
 
 from src.core.stats import EventStatsData
-from src.data_provider.power.power_provider import PowerMeasurementData
-from src.data_provider.carbon_intensity.intensity_provider import IntensityMeasurementData
+from src.providers.power.power_provider import PowerMeasurementData
+from src.providers.carbon_intensity.intensity_provider import IntensityMeasurementData
 
 logger = logging.getLogger("carbontracker.integration")
 
@@ -40,17 +40,17 @@ def calculate_device_energy_and_emissions(
     
     Power (W)
       ^
-      |                                        (t_3, P_3)
-      |                  (t_2, P_2)               o============o (t_stop, P_3)
-      |                     o                     |            |  ^
-      |                    /|                     |  Segment C |  | Last-Observation
-      |                   / |                     | Rectangle  |  | Carried-Forward
-      |                  /  |                     |            |  v
+      |                  (t_2,P_2)           (t_3, P_3)    (t_stop,P_3)
+      |                     |                     |            | 
+      |                     o---------------------o------------o                     
+      |                    /|                     |  Segment C |  
+      |                   / |                     | Rectangle  | 
+      |                  /  |                     |            |
       |     (t_1, P_1)  /   |      Segment B      |            |
       |         o      /    |     Trapezoids      |            |
       |         |     /     |                     |            |
-      |Segment A|    /      |                     |            |
-      |Rectangle|   /       |                     |            |
+      |         |    /      |                     |            |
+      |         |   /       |                     |            |
     --|---------|-----------|---------------------|------------|-----> Time
     t_start    t_1         t_2                   t_3         t_stop
 

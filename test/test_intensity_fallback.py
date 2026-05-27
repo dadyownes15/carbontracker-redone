@@ -1,12 +1,12 @@
 import pytest
 from src.core.config import IntensityMeasurementConfig
-from src.data_provider.carbon_intensity.location import resolve_location, location_to_country
-from src.data_provider.carbon_intensity.intensity_provider import (
+from src.providers.carbon_intensity.location import resolve_location, location_to_country
+from src.core.config import (
     CountryCode, GridZone, CloudRegion, GeoLocation
 )
-from src.data_provider.carbon_intensity.factory import resolve_intensity_provider
-from src.data_provider.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
-from src.data_provider.carbon_intensity.providers.static_provider import (
+from src.providers.carbon_intensity.factory import resolve_intensity_provider
+from src.providers.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
+from src.providers.carbon_intensity.providers.static_provider import (
     StaticCountryProvider, GlobalAverageProvider, StaticProvider
 )
 

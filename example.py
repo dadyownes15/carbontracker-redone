@@ -1,5 +1,5 @@
 import time
-from src.tracker import CarbonTracker
+from src.entrypoints.programmatic.manual import CarbonTracker
 from src.core.config import SessionConfig
 
 

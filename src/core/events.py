@@ -5,7 +5,7 @@ from typing import Any, Dict, Generic, Optional
 from enum import Enum
 from pydantic.dataclasses import dataclass
 from pydantic import ConfigDict
-from src.data_provider.data_provider import TData 
+from src.providers.data_provider import TData 
 from src.core.markers import Marker
 from src.core.stats import EventStatsData, SessionStatsData, SessionFinalStats
 class LogSeverity(str, Enum):

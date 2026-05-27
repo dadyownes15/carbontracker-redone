@@ -1,14 +1,41 @@
+from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
-
+from typing import Callable, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field
+
+
+@dataclass(frozen=True)
+class GeoLocation:
+    latitude: float
+    longitude: float
+
+
+@dataclass(frozen=True)
+class CloudRegion:
+    provider: str  # e.g., 'aws', 'gcp', 'azure'
+    region: str  # e.g., 'eu-west-1'
+
+
+@dataclass(frozen=True)
+class GridZone:
+    zone_id: str  # e.g., 'DK-DK1' or 'US-CAL-CISO' useful for electricityMaps
+    #
+
+
+@dataclass(frozen=True)
+class CountryCode:
+    country_code: str  # e.g., 'DK', 'US'
+
+
+@dataclass(frozen=True)
+class Location:
+    data: Union[GeoLocation, CloudRegion, GridZone, CountryCode]
 
 
 class ProjectConfig(BaseModel):
     name: str
-    api_key_reference: str
-    log_dir: str = "logs/"
+    env_path: str
+    log_dir: str
 
 
 class SimulatedComponent(BaseModel):
@@ -19,6 +46,13 @@ class SimulatedComponent(BaseModel):
 class ProviderType(str, Enum):
     POWER = "power"
     INTENSITY = "intensity"
+
+
+class LogLevel(str, Enum):
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
 
 
 class ProviderConfig(BaseModel):
@@ -35,7 +69,6 @@ class RealPowerMeasurementConfig(ProviderConfig):
 
 class SimulatedPowerMeasurementConfig(ProviderConfig):
     provider_type: Literal[ProviderType.POWER] = ProviderType.POWER
-    sample_interval: float = 0.0
     simulated_components: List[SimulatedComponent] = Field(default_factory=list)
 
 
@@ -47,9 +80,8 @@ PowerMeasurementConfig = Union[
 class IntensityMeasurementConfig(ProviderConfig):
     provider_type: Literal[ProviderType.INTENSITY] = ProviderType.INTENSITY
     method: Literal["electricityMaps", "static", "auto"] = "auto"
-    location: Optional[str] = None
+    location: Optional[Location] = None
     auto_detect_location: bool = True
-    provider_key_ref: Optional[str] = None
     static_carbon_intensity_g_per_kwh: Optional[float] = None
     api_keys: Optional[Dict[str, str]] = None
 
@@ -58,25 +90,23 @@ class PredictionConfig(BaseModel):
     enabled: bool = False
     unit_name: str = "epoch"
     total_units: Optional[int] = None
-    predict_after: int = 2
-    estimator: Literal["mean"] = "mean"
-    confidence_intervals: bool = True
-    validate_at_end: bool = False
-    forecast_interval_s: Optional[float] = None
+    predict_after_n_units: int = 2
+    forecast_interval_s: int = 30
 
 
 class SessionMode(str, Enum):
-    PYTHON_MANUAL = "python-manual"
-    PYTHON_DECORATOR = "python-decorator"
-    PROCESS = "process"
+    PYTHON_API = "python_api"
+    PYTHON_DECORATOR = "python_decorator"
+    SUBPROCESS = "subprocess"
+    SLURM = "slurm"
 
     @property
     def is_python(self) -> bool:
-        return self in (SessionMode.PYTHON_MANUAL, SessionMode.PYTHON_DECORATOR)
+        return self in (SessionMode.PYTHON_API, SessionMode.PYTHON_DECORATOR)
 
     @property
     def is_process(self) -> bool:
-        return self in (SessionMode.PROCESS,)
+        return self in (SessionMode.SUBPROCESS, SessionMode.SLURM)
 
 
 class ObserverConfig(BaseModel):
@@ -88,29 +118,29 @@ class BudgetPolicy(BaseModel):
     max_energy_kwh: Optional[float] = None
     max_emissions_g: Optional[float] = None
     max_duration_s: Optional[int] = None
-    action: Literal["raise", "warn", "stop", "checkpoint_and_stop"] = "warn"
-    use_upper_bound_se: bool = True
+    callback_on_trigger: Optional[Callable] = None
+    action: Literal["log", "stop", "callback"] = "log"
     patience: int = 2
+    evalaute_on_forecast: bool = False
 
 
 class SessionConfig(BaseModel):
     mode: SessionMode
     run_name: str
-    log_dir: str
-    flush_interval: int = 10
-    log_level: int = 20  # logging.INFO default
-    ignore_errors: bool = False
-    stats_emit_interval_s: float = 5.0
-    project_config: Optional[ProjectConfig] = None
+    ignore_errors: bool = True
+    project_config: ProjectConfig | None = None
+
+    # Logging
+    log_level: LogLevel = LogLevel.WARNING
+    session_stat_interval_s: float = 1
+    log_dir: str = "carbontracker_logs/"
 
     # Tracker configs
-    provider_configs: List[Union[PowerMeasurementConfig, IntensityMeasurementConfig]]
-    observer_config: ObserverConfig
+    provider_configs: List[ProviderConfig]
+    observer_config: ObserverConfig = Field(default_factory=ObserverConfig)
     prediction_config: PredictionConfig = Field(default_factory=PredictionConfig)
 
-    # Separated budget policies for actuals vs. forecasts
     budget_policy: Optional[BudgetPolicy] = None
-    forecast_budget_policy: Optional[BudgetPolicy] = None
 
     @classmethod
     def from_legacy_args(
@@ -193,16 +223,8 @@ class SessionConfig(BaseModel):
         resolved_log_dir = log_dir if log_dir else "logs/"
         run_name = log_file_prefix if log_file_prefix else "legacy_run"
 
-        # Map legacy verbose (0, 1, 2) to logging levels
-        if verbose == 0:
-            log_level = 30  # logging.WARNING
-        elif verbose >= 2:
-            log_level = 10  # logging.DEBUG
-        else:
-            log_level = 20  # logging.INFO
-
         return cls(
-            mode=SessionMode.PYTHON_MANUAL,
+            mode=SessionMode.PYTHON_API,
             run_name=run_name,
             log_dir=resolved_log_dir,
             ignore_errors=ignore_errors,

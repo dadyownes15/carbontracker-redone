@@ -1,6 +1,6 @@
 import time
 import logging
-from src.tracker import CarbonTracker
+from src.entrypoints.programmatic.manual import CarbonTracker
 from src.core.config import SessionMode
 
 def main():
