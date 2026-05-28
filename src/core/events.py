@@ -5,7 +5,7 @@ from enum import Enum
 from pydantic.dataclasses import dataclass
 from pydantic import ConfigDict
 from src.providers.data_provider import TData 
-from src.core.stats import EventStatsData, SessionStatsData, SessionFinalStats
+from src.core.stats import SpanStats, SessionStatsData, SessionFinalStats
 
 class LogSeverity(str, Enum):
     DEBUG = "DEBUG"
@@ -43,7 +43,7 @@ class EventStats(TrackerEvent):
     span_id: str
     started_at: datetime
     ended_at: datetime
-    stats: EventStatsData
+    stats: SpanStats 
     
 @dataclass(frozen=True)
 class SessionCurrentStatsEvent(TrackerEvent):
@@ -53,9 +53,7 @@ class SessionCurrentStatsEvent(TrackerEvent):
 @dataclass(frozen=True)
 class PredictionEvent(TrackerEvent):    
     created_at: datetime 
-    span_id: str
     result: Any # Using Any to avoid circular import with prediction.py, or we can import it. Wait, let's just use Any for now or TYPE_CHECKING.
-
 @dataclass(frozen=True)
 class GuardEvent(TrackerEvent):
     created_at: datetime

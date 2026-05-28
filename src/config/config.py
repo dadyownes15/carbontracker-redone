@@ -1,7 +1,6 @@
+from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Dict, List, Literal, Union
-from pydantic import BaseModel, Field
-
+from typing import Callable
 from src.core.types import Location, Component, IntensityMethod, BreachAction
 
 
@@ -32,40 +31,49 @@ class SessionMode(str, Enum):
         return self in (SessionMode.SUBPROCESS, SessionMode.SLURM)
 
 
-class SessionConfig(BaseModel):
+@dataclass(frozen=True)
+class SessionConfig:
     # Session identity
     mode: SessionMode
     run_name: str
-    command: list[str] | None = None
-    ignore_errors: bool = True
-    log_level: LogLevel = LogLevel.WARNING
-    log_dir: str = "carbontracker_logs/"
-    session_stat_interval_s: float = 1.0
-
+    command: list[str] | None
+    ignore_errors: bool
+    log_level: LogLevel
+    log_dir: str
+    session_stat_interval_s: float
     # Hardware & Power
-    components: list[Component] = Field(default_factory=lambda: [Component.CPU, Component.GPU, Component.RAM])
-    pue: float = 1.1
-    power_sampling_interval: float = 15.0
-    devices_by_pids: list[str] = Field(default_factory=list)
-
+    components: list[Component]
+    pue: float
+    power_sampling_interval: float
+    devices_by_pids: list[str]
     # Carbon Intensity
-    intensity_method: IntensityMethod = IntensityMethod.AUTO
-    intensity_sampling_interval: float = 900.0
-    location: Location | None = None
-    static_carbon_intensity_g_per_kwh: float | None = None
-    api_keys: dict[str, str] | None = None
-
+    intensity_method: IntensityMethod
+    intensity_sampling_interval: float
+    location: Location | None
+    static_carbon_intensity_g_per_kwh: float | None
+    api_keys: dict[str, str] | None
     # Prediction
-    predict_after: int = 2
-    predict_interval: float = 60.0
-    total_units: int | None = None
-    unit_name: str = "epoch"
-
+    unit_name: str | None
+    total_units: int | None
+    total_duration: int | None
+    predict_after_n_units: int | None
+    predict_after_n_secounds: int | None
+    predict_interval_s: float | None
     # Budget / Guardrails
-    max_energy_kwh: float | None = None
-    max_emissions_g: float | None = None
-    use_predicted_values: bool = False
-    action_on_breach: BreachAction = BreachAction.LOG
-    on_breach_callback: Callable | None = None
+    max_energy_kwh: float | None
+    max_emissions_g: float | None
+    use_predicted_values: bool
+    action_on_breach: BreachAction
+    on_breach_callback: Callable | None
 
-    model_config = {"arbitrary_types_allowed": True}
+    #TODO: We need to add aditional safety casees here, such that behavoir is clearly defined
+    def __post_init__(self):
+        if self.total_units is not None and self.total_units <= 0:
+            raise ValueError("total_units must be greater than zero")
+            
+        if self.total_duration is not None and self.total_duration <= 0:
+            raise ValueError("total_duration must be greater than zero")
+
+        if self.predict_after_n_units is not None and self.predict_after_n_units <= 0:
+            raise ValueError("predict_after_n_units must be greater than zero")
+

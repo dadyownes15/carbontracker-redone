@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Tuple
 from datetime import datetime
 
-from src.core.stats import EventStatsData
+from src.core.stats import SpanStats
 from src.providers.power.power_provider import PowerMeasurementData
 from src.providers.carbon_intensity.intensity_provider import IntensityMeasurementData
 
@@ -35,7 +35,6 @@ def calculate_device_energy_and_emissions(
 ) -> Tuple[float, float, float, float, float]:
     """
     Calculates total energy, power stats, and strictly-weighted emissions for a single device.
-    
     The integration is split into three segments to accurately model step-function workloads:
     
     Power (W)
@@ -126,7 +125,7 @@ def compute_epoch_stats(
     intensity_m: List[IntensityMeasurementData], 
     start: datetime, 
     end: datetime
-) -> EventStatsData:
+) -> SpanStats:
     """
     Computes system-level event statistics for an epoch by aggregating device-level integrations.
     """
@@ -137,7 +136,7 @@ def compute_epoch_stats(
     span_intensity = [m for m in intensity_m if start <= m.timestamp <= end]
     
     if not span_power or duration_s <= 0:
-        return EventStatsData(
+        return SpanStats(
             avg_watt=0.0, min_watt=0.0, max_watt=0.0,
             avg_intensity=0.0, min_intensity=0.0, max_intensity=0.0,
             power_usage_pr_device={}, emissions_g=0.0, power_usage_kwh=0.0,
@@ -188,7 +187,7 @@ def compute_epoch_stats(
         min_i = min(ints)
         max_i = max(ints)
         
-    return EventStatsData(
+    return SpanStats(
         avg_watt=sys_avg_w,
         min_watt=sys_min_w,
         max_watt=sys_max_w,

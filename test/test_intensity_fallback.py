@@ -2,7 +2,7 @@ import pytest
 from src.config.config import SessionConfig, SessionMode
 from src.providers.carbon_intensity.location import resolve_location, location_to_country
 from src.core.types import (
-    CountryCode, GridZone, CloudRegion, GeoLocation, Location
+    CountryCode, ElectricityMapsGridZone, CloudRegion, GeoLocation, Location
 )
 from src.providers.carbon_intensity.factory import resolve_intensity_provider
 from src.providers.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
@@ -19,7 +19,7 @@ def test_resolve_location_parsing():
     
     # Grid Zone
     res = resolve_location("DK-DK1", auto_detect=False)
-    assert isinstance(res.location, GridZone)
+    assert isinstance(res.location, ElectricityMapsGridZone)
     assert res.location.zone_id == "DK-DK1"
     
     # Cloud Region

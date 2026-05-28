@@ -3,7 +3,7 @@ import urllib.request
 import urllib.error
 from typing import Optional
 
-from src.core.types import Location, GeoLocation, CloudRegion, GridZone, CountryCode
+from src.core.types import Location, GeoLocation, CloudRegion, ElectricityMapsGridZone, CountryCode
 from src.providers.carbon_intensity.intensity_provider import (
     ResolvedLocation
 )
@@ -36,7 +36,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
     Parses a raw location string into a concrete Location object, or returns the location if it's already a Location object.
     If raw_location is None and auto_detect is True, attempts IP geolocation.
     """
-    if isinstance(raw_location, (GeoLocation, CloudRegion, GridZone, CountryCode)):
+    if isinstance(raw_location, (GeoLocation, CloudRegion, ElectricityMapsGridZone, CountryCode)):
         return ResolvedLocation(
             location=raw_location,
             source="config",
@@ -77,7 +77,7 @@ def resolve_location(raw_location: Optional[str | Location], auto_detect: bool =
         if '-' in raw:
             # Assuming anything with a hyphen that didn't match above is a grid zone
             return ResolvedLocation(
-                location=GridZone(zone_id=raw.upper()),
+                location=ElectricityMapsGridZone(zone_id=raw.upper()),
                 source="config",
                 raw_input=raw_location
             )
@@ -120,7 +120,7 @@ def location_to_country(loc: Location) -> Optional[str]:
     """Helper to try to extract a country code from any Location type."""
     if isinstance(loc, CountryCode):
         return loc.country_code
-    elif isinstance(loc, GridZone):
+    elif isinstance(loc, ElectricityMapsGridZone):
         # Many grid zones start with the country code (e.g., DK-DK1 -> DK)
         if '-' in loc.zone_id:
             country = loc.zone_id.split('-')[0]

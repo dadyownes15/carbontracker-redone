@@ -1,7 +1,8 @@
+from multiprocessing import Value
 import queue
 import logging
 from threading import Thread, Event
-from typing import Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable
 from datetime import datetime
 
 from src.config.config import SessionConfig, SessionMode
@@ -17,13 +18,13 @@ from src.core.events import (
     GuardEvent,
     LogSeverity,
 )
-from src.core.stats import EventStatsData, SessionStatsData, SessionFinalStats
+from src.core.stats import SpanStats, SessionStatsData, SessionFinalStats
 from src.providers.data_provider import MeasurementData
 from src.providers.power.power_provider import PowerMeasurementData
 from src.providers.carbon_intensity.intensity_provider import (
     IntensityMeasurementData,
 )
-from src.core.prediction import PredictionEngine, PredictionResult
+from src.core.prediction import ForecastResult, PredictionEngine, PredictionResult
 from src.core.execution_guard import BudgetGuard, GuardVerdict
 from src.core.emissions_calculations import compute_epoch_stats
 from src.core.events import FinishedSession
@@ -35,54 +36,41 @@ class AggregatorThread(Thread):
     def __init__(
         self,
         session_config: SessionConfig,
-        aggregation_queue: "queue.Queue[TrackerEvent]",
-        event_sink: "List[queue.Queue[TrackerEvent]]",
-        guard_callback: Optional[Callable[[GuardVerdict], None]] = None,
+        session_stats_interval_s: int,
+
+        aggregation_queue: queue.Queue[TrackerEvent],
+        event_sink: list[queue.Queue[TrackerEvent]],
+        prediction_engine: PredictionEngine | None = None,
+        budget_guard: BudgetGuard | None = None,
     ) -> None:
         super().__init__()
         self.aggregation_queue = aggregation_queue
         self.event_sink = event_sink
-        self._mode = session_config.mode
-        self._stats_emit_interval_s = session_config.session_stat_interval_s
-        self._guard_callback = guard_callback
+        self._prediction_engine = prediction_engine
+        self._budget_guard = budget_guard
 
-        self._predict_after = (
-            session_config.predict_after
-            if session_config.total_units is not None
-            else float("inf")
-        )
-        self._prediction_engine = (
-            PredictionEngine(session_config.total_units)
-            if session_config.total_units
-            else None
-        )
-        
-        has_budget = session_config.max_energy_kwh is not None or session_config.max_emissions_g is not None
-        self._budget_guard = BudgetGuard(session_config) if has_budget else None
-        self._session_start_time: Optional[datetime] = None
-
-        self._stop_event = Event()
+        # Thread info
         self.daemon = True
         self.name = "aggregator_thread"
 
-        # Internal State
-        self._active_spans: Dict[str, datetime] = {}
-        self._power_measurements: List[PowerMeasurementData] = []
-        self._intensity_measurements: List[IntensityMeasurementData] = []
 
-        self._span_stats_history: List[EventStatsData] = []
-        self._span_durations_s: List[float] = []
+        # Settings
+        self.session_stats_interval_s: int = session_stats_interval_s
+        # Internal State
+        self._active_spans: dict[str, datetime] = {}
+        self._power_measurements: list[PowerMeasurementData] = []
+        self._intensity_measurements: list[IntensityMeasurementData] = []
+        self._forecasts: list[ForecastResult]
+        self._session_start_time: datetime = datetime.now()
+        self._span_stats_history: list[SpanStats] = []
+        self._span_durations_s: list[float] = []
+        self._last_stats_emit: datetime = datetime.min
 
         # Cumulative Stats
         self._cumulative_emissions_g: float = 0.0
         self._cumulative_power_kwh: float = 0.0
-
         self._completed_root_spans_count: int = 0
-        self._last_stats_emit = datetime.min
 
-        # To store predictions
-        self._last_prediction: Optional[PredictionResult] = None
-        self._forecast_intensity: Optional[float] = None
 
     def stop(self) -> SessionFinalStats:
         self.aggregation_queue.put(None)
@@ -100,9 +88,10 @@ class AggregatorThread(Thread):
         return final_stats
 
     def run(self) -> None:
+        # Create a start event here
         while True:
             try:
-                event = self.aggregation_queue.get()
+                event = self.aggregation_queue.get(timeout=self.session_stats_interval_s)
                 if event is None:
                     break
 
@@ -115,11 +104,9 @@ class AggregatorThread(Thread):
                 elif isinstance(event, MeasurementEvent):
                     self._handle_measurement(event)
 
-                if self.aggregation_queue.qsize() == 0:
-                    # Allows us f.ex to accummalate powermeasurements from all components
-                    # before emit sesssion stats, under the assump. that they are pushed to gether
-                    # relies on python holding the GIL during for loops, to avoid raceconditions
-                    self._emit_session_stats()
+            except queue.Empty:
+                self._emit_session_stats()
+                self._update_predictions()
 
             except Exception as e:
                 logger.error(f"Aggregator encountered error processing event: {e}")
@@ -142,18 +129,20 @@ class AggregatorThread(Thread):
 
         self._active_spans[event.span_id] = event.started_at
 
-    def _handle_measurement(self, event: MeasurementEvent) -> None:
+    def _handle_measurement(self, event: MeasurementEvent[Any]) -> None:
         if isinstance(event.data, PowerMeasurementData):
             self._power_measurements.append(event.data)
         elif isinstance(event.data, IntensityMeasurementData):
             self._intensity_measurements.append(event.data)
+        else: 
+            logger.error("Unknown measurement event:\n", event)
 
         self._emit_event(event)
 
     def _handle_stop(self, event: EventStop) -> None:
         span_id = event.span_id
         if span_id not in self._active_spans:
-            logger.warning(
+            logger.error(
                 "EventStop triggered, but could not find span_id in active spans"
             )
 
@@ -170,75 +159,58 @@ class AggregatorThread(Thread):
             ended_at=ended_at,
             stats=event_stats_data,
         )
+
         self._emit_event(stats_event)
+        
+        # Accumalating the span stats here, why do we do this? 
+        self._span_stats_history.append(event_stats_data)
 
-        # Only root-level spans count towards cumulative session totals and predictions
-        if event.parent_span_id is None:
-            self._cumulative_emissions_g += event_stats_data.emissions_g
-            self._cumulative_power_kwh += event_stats_data.power_usage_kwh
-            self._completed_root_spans_count += 1
-
-            self._span_stats_history.append(event_stats_data)
-            self._span_durations_s.append((ended_at - started_at).total_seconds())
-
-            self._update_predictions(span_id, ended_at)
-
-        # Memory cleanup
+       # Memory cleanup
         self._cleanup_old_measurements()
 
-    def _update_predictions(self, trigger_span_id: str, ended_at: datetime) -> None:
-        if (
-            not self._prediction_engine
-            or self._completed_root_spans_count < self._predict_after
-        ):
+    
+    def _update_predictions(self) -> None:
+        
+        # Stop if no prediction engine present
+        if self._prediction_engine is None:
             return
 
-        run_duration_s = (
-            (ended_at - self._session_start_time).total_seconds()
-            if self._session_start_time
-            else 0.0
-        )
+        now = datetime.now()
+        run_duration_s = (now - self._session_start_time).total_seconds() 
+
+       
+        should_predict = self._prediction_engine.should_predict(now=now, run_duration_s=run_duration_s, spans=self._span_stats_history)
+
+        if not should_predict:
+            return
 
         # TODO (dadyownes15): Implement ForecastResult generation
         prediction = self._prediction_engine.predict(
-            completed_units=self._completed_root_spans_count,
+            span_stats=self._span_stats_history,
             run_duration_s=run_duration_s,
             current_cumulative_energy_kwh=self._cumulative_power_kwh,
             current_cumulative_emissions_g=self._cumulative_emissions_g,
-            forecast=None,
         )
-        if not prediction:
-            return
 
-        self._last_prediction = prediction
 
         pred_event = PredictionEvent(
-            created_at=datetime.now(), span_id=trigger_span_id, result=prediction
-        )
+            created_at=datetime.now(),  result=prediction)
         self._emit_event(pred_event)
-
-        if self._budget_guard:
-            verdict = self._budget_guard.check(prediction)
-
-            if verdict.action != "pass":
-                if self._mode.is_python and self._guard_callback:
-                    self._guard_callback(verdict)
-                elif self._mode.is_process:
-                    guard_event = GuardEvent(
-                        created_at=datetime.now(),
-                        verdict=verdict,
-                        prediction=prediction,
-                    )
-                    self._emit_event(guard_event)
+        
+        # Only trigger guard on prediction events, if we use the predicted values
+        if self._budget_guard is not None and self._budget_guard.use_predicted_values:
+            self._check_guard(prediction=prediction)
 
     def _emit_session_stats(self) -> None:
         if (not self._power_measurements) or (not self._intensity_measurements):
             return
-
         now = datetime.now()
-        if (now - self._last_stats_emit).total_seconds() < self._stats_emit_interval_s:
+        time_since_last_update_s = (now - self._last_stats_emit).total_seconds() 
+        if  time_since_last_update_s < self._emit_session_stats_interval_s
             return
+
         self._last_stats_emit = now
+
 
         if self._power_measurements:
             current_w = sum(self._power_measurements[-1].power_usage_pr_device.values())
@@ -252,6 +224,13 @@ class AggregatorThread(Thread):
             if self._intensity_measurements
             else 0.0
         )
+       
+        #TODO: Update this to be a weighted average, by reusing the calculation
+        power_usage_kwh_since_last_update = time_since_last_update_s*current_w
+        emissions_g_since_last_update = power_usage_kwh_since_last_update * current_i  
+    
+        self._cumulative_power_kwh += power_usage_kwh_since_last_update
+        self._cumulative_emissions_g += emissions_g_since_last_update
 
         stats = SessionStatsData(
             current_wattage=current_w,
@@ -262,6 +241,25 @@ class AggregatorThread(Thread):
         )
         event = SessionCurrentStatsEvent(timestamp=now, stats=stats)
         self._emit_event(event)
+
+        if self._budget_guard is not None and not self._budget_guard.use_predicted_values:
+            self._check_guard(prediction=None)
+
+    def _check_guard(self, prediction: PredictionResult | None = None) -> None:
+        if self._budget_guard is None:
+            return
+            
+        verdict = self._budget_guard.check(
+            cumulative_energy_kwh=self._cumulative_power_kwh,
+            cumulative_emissions_g=self._cumulative_emissions_g,
+            prediction=prediction
+        )
+        guard_event = GuardEvent(
+            created_at=datetime.now(),
+            verdict=verdict,
+            prediction=prediction,
+        )
+        self._emit_event(guard_event)
 
     def _cleanup_old_measurements(self) -> None:
         if not self._active_spans:
@@ -278,3 +276,4 @@ class AggregatorThread(Thread):
         self._intensity_measurements = [
             m for m in self._intensity_measurements if m.timestamp >= oldest_start
         ]
+

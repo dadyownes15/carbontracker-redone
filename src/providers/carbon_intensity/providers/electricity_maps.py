@@ -1,13 +1,11 @@
 import json
-import urllib.request
-import urllib.error
 from datetime import datetime
 from src.providers.data_provider import DataProvider
 from src.providers.carbon_intensity.intensity_provider import (
     IntensityMeasurementData, 
     ResolvedLocation
 )
-from src.core.types import GeoLocation, GridZone, CountryCode
+from src.core.types import GeoLocation, ElectricityMapsGridZone, CountryCode
 from src.core.exceptions import ProviderConfigError, APIError
 
 class ElectricityMapsProvider(DataProvider[IntensityMeasurementData]):
@@ -24,7 +22,7 @@ class ElectricityMapsProvider(DataProvider[IntensityMeasurementData]):
         self.query_params = {}
         if location.location:
             data = location.location
-            if isinstance(data, GridZone):
+            if isinstance(data, ElectricityMapsGridZone):
                 self.query_params['zone'] = data.zone_id
             elif isinstance(data, GeoLocation):
                 self.query_params['lat'] = str(data.latitude)
