@@ -9,12 +9,12 @@ from src.config.config import SessionConfig, SessionMode
 from src.core.events import FinishedSession, TrackerEvent
 from src.core.exceptions import WrongModeError
 from src.core.execution_guard import GuardVerdict
+from src.providers.power.factory import create_power_thread
 from src.reporters.file_logger import FileWriterThread
 from src.reporters.logging_handler import EventQueueLogHandler
 from src.reporters.terminal import TerminalOutputThread
 from src.providers.data_provider import MeasurementData
-from src.providers.base import DataProviderThread
-from src.providers.factory import create_power_thread
+from src.providers.data_provider_thread import DataProviderThread
 from src.providers.carbon_intensity.factory import create_intensity_thread
 from src.providers.power.power_provider import PowerMeasurementData
 from src.observers.base import ObserverThread
@@ -52,8 +52,9 @@ class CarbonTrackerEngine:
 
         # Build provider threads with shared trigger events
         self.provider_threads: list[
-            DataProviderThread[MeasurementData | PowerMeasurementData]
+            Any
         ] = []
+
         self.provider_trigger_events: list[Event] = []
 
         # Power Provider
@@ -76,6 +77,11 @@ class CarbonTrackerEngine:
                 aggregation_queue=self.aggregation_queue,
                 notify_event=intensity_trigger,
             )
+        )
+
+        # Intensity Forecast provider
+        self.provider_threads.append(
+            
         )
 
         self.observer_thread: ObserverThread = observer_factory(

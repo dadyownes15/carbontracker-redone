@@ -1,6 +1,6 @@
 
 from abc import ABC
-from pydantic.dataclasses import dataclass
+from dataclasses import dataclass
 from src.core.resolution import ResolutionStep
 from src.core.types import Location
 from src.providers.data_provider import DataProvider, MeasurementData

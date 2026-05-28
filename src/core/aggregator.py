@@ -35,9 +35,7 @@ logger = logging.getLogger("carbontracker.aggregator")
 class AggregatorThread(Thread):
     def __init__(
         self,
-        session_config: SessionConfig,
         session_stats_interval_s: int,
-
         aggregation_queue: queue.Queue[TrackerEvent],
         event_sink: list[queue.Queue[TrackerEvent]],
         prediction_engine: PredictionEngine | None = None,
@@ -53,13 +51,14 @@ class AggregatorThread(Thread):
         self.daemon = True
         self.name = "aggregator_thread"
 
-
         # Settings
         self.session_stats_interval_s: int = session_stats_interval_s
+
         # Internal State
         self._active_spans: dict[str, datetime] = {}
         self._power_measurements: list[PowerMeasurementData] = []
         self._intensity_measurements: list[IntensityMeasurementData] = []
+        self._forecasts_measurements = []
         self._forecasts: list[ForecastResult]
         self._session_start_time: datetime = datetime.now()
         self._span_stats_history: list[SpanStats] = []
@@ -88,7 +87,6 @@ class AggregatorThread(Thread):
         return final_stats
 
     def run(self) -> None:
-        # Create a start event here
         while True:
             try:
                 event = self.aggregation_queue.get(timeout=self.session_stats_interval_s)
@@ -206,7 +204,7 @@ class AggregatorThread(Thread):
             return
         now = datetime.now()
         time_since_last_update_s = (now - self._last_stats_emit).total_seconds() 
-        if  time_since_last_update_s < self._emit_session_stats_interval_s
+        if time_since_last_update_s < self.session_stats_interval_s:
             return
 
         self._last_stats_emit = now

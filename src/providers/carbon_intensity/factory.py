@@ -4,13 +4,13 @@ from typing import List, Optional
 from src.core.exceptions import ProviderConfigError, APIError
 from src.config.config import SessionConfig
 from src.providers.data_provider import DataProvider
-from src.providers.base import DataProviderThread
+from src.providers.data_provider_thread import DataProviderThread
 from src.providers.carbon_intensity.intensity_provider import (
     IntensityMeasurementData, 
     IntensityResolution,
     ResolvedLocation
 )
-from src.core.resolution import ResolutionStep
+from src.core.resolution import ResolutionStep, print_resolution_steps
 from src.providers.carbon_intensity.location import resolve_location, location_to_country
 from src.providers.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
 from src.providers.carbon_intensity.providers.static_provider import (
@@ -35,7 +35,7 @@ def create_intensity_thread(
     This also handles printing the resolution log to the user.
     """
     resolution = resolve_intensity_provider(config)
-    print_resolution(resolution)
+    print_resolution_steps(resolution.steps, logger)
     
     return DataProviderThread(
         sample_interval=config.intensity_sampling_interval,
@@ -181,11 +181,4 @@ def resolve_intensity_provider(config: SessionConfig) -> IntensityResolution:
     else:
         raise ValueError(f"Unrecognized intensity method: {method}")
 
-def print_resolution(resolution):    
-    for step in resolution.steps:
-        if step.level == "success":
-            logger.info(f"✓ {step.detail}")
-        elif step.level == "warning":
-            logger.warning(f"⚠ {step.detail}")
-        else:
-            logger.info(f"ℹ {step.detail}")
+

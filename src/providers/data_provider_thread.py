@@ -1,6 +1,6 @@
 import queue
 from threading import Thread, Event
-from typing import List, TypeVar, Generic
+from typing import TypeVar, Generic
 from src.providers.data_provider import DataProvider, MeasurementData
 from src.core.events import TrackerEvent, MeasurementEvent
 
@@ -15,15 +15,17 @@ class DataProviderThread(Thread, Generic[TData]):
     def __init__(
         self,
         sample_interval: float,
-        providers: List[DataProvider[TData]],
+        providers: list[DataProvider[TData]],
         aggregation_queue: "queue.Queue[TrackerEvent]",
         notify_event: Event,
+        initial_work: bool = False,
     ) -> None:
         super().__init__()
         self.sample_interval_s = sample_interval
         self.providers = providers
         self.aggregation_queue = aggregation_queue
         self._trigger_event = notify_event
+        self._initial_work: bool = initial_work
         self._stop_event = Event()
         self.daemon = True
         self.name: str = "_".join([provider.name for provider in self.providers])
@@ -33,6 +35,9 @@ class DataProviderThread(Thread, Generic[TData]):
         self._trigger_event.set()
 
     def run(self) -> None:
+        if self._initial_work:
+            self._work()
+
         while not self._stop_event.is_set():
             # Blocks until sample_interval passes (in-between fetch) OR trigger_event is set (forced fetch)
             # Goal is to ensure that we always fetch after new epoch & we can have rergular samples

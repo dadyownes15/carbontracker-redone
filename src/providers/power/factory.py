@@ -5,10 +5,10 @@ from threading import Event
 
 from src.core.exceptions import ProviderUnavailableError, ProviderPermissionError
 from src.config.config import SessionConfig
-from src.providers.base import DataProviderThread
+from src.providers.data_provider_thread import DataProviderThread
 from src.providers.power.power_provider import PowerMeasurementData
 from src.core.events import TrackerEvent
-from src.core.resolution import ResolutionStep
+from src.core.resolution import ResolutionStep, print_resolution_steps
 
 from src.providers.power.providers.cpu.intel import IntelCPU
 from src.providers.power.providers.cpu.generic import GenericCPU
@@ -63,14 +63,7 @@ def create_power_thread(
         except (ProviderPermissionError, ProviderUnavailableError):
             pass
 
-    # Print the resolution log
-    for step in steps:
-        if step.level == "success":
-            logger.info(f"{step.detail}")
-        elif step.level == "warning":
-            logger.warning(f" {step.detail}")
-        else:
-            logger.info(f"{step.detail}")
+    print_resolution_steps(steps, logger)
 
     print("Total providers: ", len(providers))
     return DataProviderThread(
