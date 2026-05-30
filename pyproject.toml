@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "carbontrackerv2"
 version = "0.1.0"
@@ -5,13 +9,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "click>=8.4.1",
-    "numpy>=2.2.6",
-    "nvidia-ml-py>=13.595.45",
+    "click>=8.1",
     "py-cpuinfo>=9.0.0",
-    "pydantic>=2.13.4",
-    "tomli>=2.4.1",
-    "tomli-w>=1.2.0",
+    "pydantic>=2,<3",
+    "tomli>=2; python_version < '3.11'",
+    "tomli-w>=1.0",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "nvidia-ml-py>=12,<14",
 ]
 
 [tool.pyright]
@@ -22,6 +29,9 @@ venv = ".venv"
 members = ["carbontracker"]
 
 [project.scripts]
-carbontracker = "src.entrypoints.cli.cli:main"
+carbontracker = "carbontracker.entrypoints.cli.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/carbontracker"]
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = ["src"]

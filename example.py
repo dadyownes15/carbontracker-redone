@@ -1,6 +1,6 @@
 import time
-from src.entrypoints.programmatic.manual import CarbonTracker
-from src.core.types import Component
+from carbontracker.entrypoints.programmatic.manual import CarbonTracker
+from carbontracker.core.types import Component
 
 def main():
     print("Initializing CarbonTracker...")

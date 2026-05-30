@@ -1,14 +1,24 @@
 import pytest
-from src.config.config import SessionConfig, SessionMode
-from src.providers.carbon_intensity.location import resolve_location, location_to_country
-from src.core.types import (
+from carbontracker.core.runtime import RuntimeOptions
+from carbontracker.providers.carbon_intensity.location import resolve_location, location_to_country
+from carbontracker.core.types import (
     CountryCode, ElectricityMapsGridZone, CloudRegion, GeoLocation, Location
 )
-from src.providers.carbon_intensity.factory import resolve_intensity_provider
-from src.providers.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
-from src.providers.carbon_intensity.providers.static_provider import (
+from carbontracker.providers.carbon_intensity.factory import resolve_intensity_provider
+from carbontracker.providers.carbon_intensity.providers.electricity_maps import ElectricityMapsProvider
+from carbontracker.providers.carbon_intensity.providers.static_provider import (
     StaticCountryProvider, GlobalAverageProvider, StaticProvider
 )
+
+
+def _runtime_options(**overrides):
+    values = {
+        "run_name": "test",
+        "auto_detect_location": False,
+    }
+    values.update(overrides)
+    return RuntimeOptions(**values)
+
 
 def test_resolve_location_parsing():
     # Country Code
@@ -44,23 +54,19 @@ def test_location_to_country():
     assert location_to_country(res.location) == "DK"
 
 def test_factory_electricity_maps():
-    config = SessionConfig(
-        mode=SessionMode.PYTHON_API,
-        run_name="test",
+    config = _runtime_options(
         intensity_method="electricityMaps",
         location=CountryCode(country_code="DK"),
-        api_keys={"electricityMaps": "test-key"}
+        api_keys={"electricityMaps": "test-key"},
     )
     resolution = resolve_intensity_provider(config)
     assert isinstance(resolution.provider, ElectricityMapsProvider)
     assert resolution.provider.api_key == "test-key"
 
 def test_factory_static_override():
-    config = SessionConfig(
-        mode=SessionMode.PYTHON_API,
-        run_name="test",
+    config = _runtime_options(
         intensity_method="static",
-        static_carbon_intensity_g_per_kwh=123.4
+        static_carbon_intensity_g_per_kwh=123.4,
     )
     resolution = resolve_intensity_provider(config)
     assert isinstance(resolution.provider, StaticProvider)
@@ -69,12 +75,10 @@ def test_factory_static_override():
 
 def test_factory_auto_fallback_to_country():
     # No API key, but location provided (auto method)
-    config = SessionConfig(
-        mode=SessionMode.PYTHON_API,
-        run_name="test",
+    config = _runtime_options(
         intensity_method="auto",
         location=CountryCode(country_code="DK"),
-        api_keys=None
+        api_keys=None,
     )
     resolution = resolve_intensity_provider(config)
     assert isinstance(resolution.provider, StaticCountryProvider)
@@ -82,12 +86,9 @@ def test_factory_auto_fallback_to_country():
 
 def test_factory_auto_fallback_to_global():
     # No API key, no location, auto_detect false
-    config = SessionConfig(
-        mode=SessionMode.PYTHON_API,
-        run_name="test",
+    config = _runtime_options(
         intensity_method="auto",
         location=None,
-        auto_detect_location=False
     )
     resolution = resolve_intensity_provider(config)
     assert isinstance(resolution.provider, GlobalAverageProvider)
