@@ -1,12 +1,15 @@
 import logging
 import queue
+import uuid
 from dataclasses import dataclass, field, fields
+from datetime import datetime
+from pathlib import Path
 from threading import Event, Thread
 from typing import Any, Sequence
 
 from carbontracker.config.config import LogLevel
 from carbontracker.core.aggregator import AggregatorThread
-from carbontracker.core.events import TrackerEvent
+from carbontracker.core.events import SessionMetadata, StartedSession, TrackerEvent
 from carbontracker.core.profiling import SpanPowerProfiler
 from carbontracker.core.types import Component, IntensityMethod, Location
 from carbontracker.observers.base import ObserverThread
@@ -81,9 +84,15 @@ def _positive_number(name: str, value: float) -> float:
     return numeric
 
 
+def generate_default_run_name(now: datetime | None = None) -> str:
+    timestamp = now if now is not None else datetime.now()
+    return timestamp.strftime("run_%Y%m%d_%H%M%S")
+
+
 @dataclass(frozen=True)
 class RuntimeOptions:
-    run_name: str = "carbontracker"
+    project_name: str = "carbontracker"
+    run_name: str = field(default_factory=generate_default_run_name)
     log_dir: str = "carbontracker_logs/"
     ignore_errors: bool = True
     log_level: LogLevel | str = LogLevel.WARNING
@@ -101,6 +110,11 @@ class RuntimeOptions:
     auto_detect_location: bool = True
 
     def __post_init__(self) -> None:
+        project_name = str(self.project_name).strip()
+        if not project_name:
+            raise ValueError("project_name must be a non-empty string")
+        object.__setattr__(self, "project_name", project_name)
+
         run_name = str(self.run_name).strip()
         if not run_name:
             raise ValueError("run_name must be a non-empty string")
@@ -200,6 +214,8 @@ class ManualRuntimeControls:
 @dataclass
 class RuntimeBundle:
     options: RuntimeOptions
+    metadata: SessionMetadata
+    log_file_path: Path
     observer_thread: ObserverThread
     provider_threads: list[DataProviderThread[Any]]
     aggregator_thread: AggregatorThread
@@ -233,6 +249,18 @@ def _setup_logging(
     logger.addHandler(queue_handler)
 
 
+def _config_summary(options: RuntimeOptions) -> dict[str, Any]:
+    return {
+        "components": [component.value for component in options.components],
+        "pue": options.pue,
+        "power_sampling_interval": options.power_sampling_interval,
+        "intensity_method": options.intensity_method.value,
+        "intensity_sampling_interval": options.intensity_sampling_interval,
+        "forecast_provider_name": options.forecast_provider_name,
+        "auto_detect_location": options.auto_detect_location,
+    }
+
+
 def _build_shared_runtime(
     options: RuntimeOptions,
     observer_thread: ObserverThread,
@@ -241,26 +269,44 @@ def _build_shared_runtime(
     terminal_queue: queue.Queue[TrackerEvent],
     logger_queue: queue.Queue[TrackerEvent],
     event_sink: list[queue.Queue[TrackerEvent]],
+    command: Sequence[str] | None = None,
+    trace_id: str | None = None,
     manual_controls: ManualRuntimeControls | None = None,
 ) -> RuntimeBundle:
+    file_writer = FileWriterThread(
+        log_dir=options.log_dir,
+        run_name=options.run_name,
+        event_queue=logger_queue,
+    )
+    metadata = SessionMetadata(
+        project_name=options.project_name,
+        run_name=options.run_name,
+        log_dir=options.log_dir,
+        log_file_path=str(file_writer.log_file_path),
+        command=tuple(command) if command is not None else None,
+        trace_id=trace_id,
+        config_summary=_config_summary(options),
+    )
     profiler = SpanPowerProfiler()
     aggregator_thread = AggregatorThread(
         session_stats_interval_s=options.session_stat_interval_s,
         aggregation_queue=aggregation_queue,
         event_sink=event_sink,
         profiler=profiler,
+        session_metadata=metadata,
     )
     reporter_threads: list[Thread] = [
         TerminalOutputThread(log_level=options.log_level, event_queue=terminal_queue),
-        FileWriterThread(
-            log_dir=options.log_dir,
-            run_name=options.run_name,
-            event_queue=logger_queue,
-        ),
+        file_writer,
     ]
+    started_event = StartedSession(timestamp=datetime.now(), metadata=metadata)
+    for sink in event_sink:
+        sink.put(started_event)
 
     return RuntimeBundle(
         options=options,
+        metadata=metadata,
+        log_file_path=file_writer.log_file_path,
         observer_thread=observer_thread,
         provider_threads=provider_threads,
         aggregator_thread=aggregator_thread,
@@ -366,10 +412,12 @@ def build_manual_runtime(options: RuntimeOptions) -> RuntimeBundle:
         provider_trigger_events,
     ) = _runtime_parts(options)
 
+    trace_id = str(uuid.uuid4())
     observer_thread = ManualObserverThread(
         aggregation_queue=aggregation_queue,
         event_sink=event_sink,
         notify_events=provider_trigger_events,
+        trace_id=trace_id,
     )
     manual_controls = ManualRuntimeControls(observer_thread)
 
@@ -381,12 +429,15 @@ def build_manual_runtime(options: RuntimeOptions) -> RuntimeBundle:
         terminal_queue=terminal_queue,
         logger_queue=logger_queue,
         event_sink=event_sink,
+        trace_id=trace_id,
         manual_controls=manual_controls,
     )
 
 
 def build_subprocess_runtime(
-    command: Sequence[str], options: RuntimeOptions
+    command: Sequence[str],
+    options: RuntimeOptions,
+    capture_output_events: bool = False,
 ) -> RuntimeBundle:
     resolved_command = [str(part) for part in command]
     if not resolved_command or not any(part.strip() for part in resolved_command):
@@ -401,11 +452,14 @@ def build_subprocess_runtime(
         provider_trigger_events,
     ) = _runtime_parts(options)
 
+    trace_id = str(uuid.uuid4())
     observer_thread = SubprocessObserverThread(
         command=resolved_command,
         aggregation_queue=aggregation_queue,
         event_sink=event_sink,
         notify_events=provider_trigger_events,
+        trace_id=trace_id,
+        capture_output_events=capture_output_events,
     )
 
     return _build_shared_runtime(
@@ -416,4 +470,6 @@ def build_subprocess_runtime(
         terminal_queue=terminal_queue,
         logger_queue=logger_queue,
         event_sink=event_sink,
+        command=resolved_command,
+        trace_id=trace_id,
     )

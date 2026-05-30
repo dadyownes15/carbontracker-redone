@@ -10,6 +10,7 @@ from carbontracker.core.events import (
     MeasurementEvent,
     PredictionEvent,
     SessionCurrentStatsEvent,
+    SessionMetadata,
     SpanProfileEvent,
     SpanStart,
     SpanStop,
@@ -42,6 +43,7 @@ class AggregatorThread(Thread):
         aggregation_queue: queue.Queue[TrackerEvent],
         event_sink: list[queue.Queue[TrackerEvent]],
         profiler: SpanPowerProfiler,
+        session_metadata: SessionMetadata | None = None,
         prediction_engine: PredictionEngine | None = None,
         budget_guard: BudgetGuard | None = None,
     ) -> None:
@@ -49,6 +51,12 @@ class AggregatorThread(Thread):
         self.aggregation_queue = aggregation_queue
         self.event_sink = event_sink
         self._profiler = profiler
+        self._session_metadata = session_metadata or SessionMetadata(
+            project_name="carbontracker",
+            run_name="carbontracker",
+            log_dir="carbontracker_logs/",
+            log_file_path="carbontracker_logs/carbontracker_events.jsonl",
+        )
         self._prediction_engine = prediction_engine
         self._budget_guard = budget_guard
 
@@ -83,7 +91,11 @@ class AggregatorThread(Thread):
             completed_spans_count=self._completed_root_spans_count,
         )
 
-        event = FinishedSession(timestamp=datetime.now(), stats=final_stats)
+        event = FinishedSession(
+            timestamp=datetime.now(),
+            metadata=self._session_metadata,
+            stats=final_stats,
+        )
         self._emit_event(event)
 
         return final_stats

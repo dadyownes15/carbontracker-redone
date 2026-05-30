@@ -1,11 +1,12 @@
-from datetime import datetime
-from typing import Any, Generic 
-
 from enum import Enum
-from pydantic.dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Generic, Literal
+
 from pydantic import ConfigDict
-from carbontracker.providers.data_provider import TData 
+from pydantic.dataclasses import dataclass
+
 from carbontracker.core.stats import SpanStats, SessionStatsData, SessionFinalStats
+from carbontracker.providers.data_provider import TData
 
 class LogSeverity(str, Enum):
     DEBUG = "DEBUG"
@@ -17,6 +18,16 @@ class LogSeverity(str, Enum):
 @dataclass(frozen=True)
 class TrackerEvent():
     ...
+
+@dataclass(frozen=True)
+class SessionMetadata:
+    project_name: str
+    run_name: str
+    log_dir: str
+    log_file_path: str
+    command: tuple[str, ...] | None = None
+    trace_id: str | None = None
+    config_summary: dict[str, Any] | None = None
 
 @dataclass(frozen=True, config=ConfigDict(arbitrary_types_allowed=True))
 class MeasurementEvent(TrackerEvent, Generic[TData]):
@@ -74,9 +85,31 @@ class DiagnosticEvent(TrackerEvent):
 @dataclass(frozen=True)
 class FinishedSession(TrackerEvent):
     timestamp: datetime
+    metadata: SessionMetadata
     stats: SessionFinalStats
     
 @dataclass(frozen=True)
 class StartedSession(TrackerEvent):
-    pass
-     
+    timestamp: datetime
+    metadata: SessionMetadata
+
+@dataclass(frozen=True)
+class ProcessStartedEvent(TrackerEvent):
+    timestamp: datetime
+    command: tuple[str, ...]
+    pid: int
+    trace_id: str
+
+@dataclass(frozen=True)
+class ProcessExitedEvent(TrackerEvent):
+    timestamp: datetime
+    return_code: int | None
+    interrupted: bool
+    trace_id: str
+
+@dataclass(frozen=True)
+class ProcessOutputEvent(TrackerEvent):
+    timestamp: datetime
+    stream: Literal["stdout", "stderr"]
+    line: str
+    trace_id: str

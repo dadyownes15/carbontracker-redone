@@ -1,32 +1,23 @@
-import json
+from pathlib import Path
 from queue import Queue
 from threading import Thread
-from pathlib import Path
-from datetime import datetime
-from enum import Enum
-import dataclasses
 
-from carbontracker.core.events import TrackerEvent
-
-class EventJSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        if isinstance(obj, Enum):
-            return obj.value
-        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-            return dataclasses.asdict(obj)
-        # Handle pydantic models or other objects if necessary
-        if hasattr(obj, "model_dump"):
-            return obj.model_dump()
-        return super().default(obj)
+from carbontracker.core.event_codec import event_to_json
+from carbontracker.core.events import ProcessOutputEvent, TrackerEvent
 
 class FileWriterThread(Thread):
-    def __init__(self, log_dir: str, run_name: str, event_queue: Queue[TrackerEvent]): 
+    def __init__(
+        self,
+        log_dir: str,
+        run_name: str,
+        event_queue: Queue[TrackerEvent],
+        persist_process_output: bool = False,
+    ):
         super().__init__()
         self.log_dir = log_dir
         self.run_name = run_name
         self.event_queue = event_queue
+        self.persist_process_output = persist_process_output
         self.name = "File Logger Thread"
        
         # Making it a daemon thread ensures it automatically shuts down 
@@ -53,14 +44,16 @@ class FileWriterThread(Thread):
                     break
                     
                 try:
-                    # Inject event type for easier parsing
-                    event_dict = dataclasses.asdict(event)
-                    event_dict["__type__"] = type(event).__name__
-                    
-                    json_str = json.dumps(event_dict, cls=EventJSONEncoder)
+                    if (
+                        isinstance(event, ProcessOutputEvent)
+                        and not self.persist_process_output
+                    ):
+                        continue
+
+                    json_str = event_to_json(event)
                     log_file.write(json_str + "\n")
                     log_file.flush()
-                except Exception as e:
+                except Exception:
                     # Fallback or silent failure for logging errors to not block application
                     pass
                 finally:

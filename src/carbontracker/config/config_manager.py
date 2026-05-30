@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+import tempfile
+from typing import Any, Dict, Optional
 
 try:
     import tomllib as tomli
@@ -26,6 +27,22 @@ class GlobalConfig(BaseModel):
     default_pue: Optional[float] = None
 
 
+def get_global_config_dir() -> Path:
+    return Path.home() / ".config" / "carbontracker"
+
+
+def get_global_config_file() -> Path:
+    return get_global_config_dir() / "config.toml"
+
+
+def get_local_config_dir() -> Path:
+    return Path.cwd() / ".carbontracker"
+
+
+def get_local_config_file() -> Path:
+    return get_local_config_dir() / "config.toml"
+
+
 def _read_toml(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
@@ -40,12 +57,26 @@ def _read_toml(path: Path) -> Dict[str, Any]:
 
 def _write_toml(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        tomli_w.dump(data, f)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent)
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            tomli_w.dump(data, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def load_global_config() -> GlobalConfig:
-    data = _read_toml(GLOBAL_CONFIG_FILE)
+    data = _read_toml(get_global_config_file())
     try:
         return GlobalConfig.model_validate(data)
     except Exception:
@@ -54,16 +85,17 @@ def load_global_config() -> GlobalConfig:
 
 def save_global_config(config: GlobalConfig) -> None:
     data = config.model_dump(exclude_none=True)
-    _write_toml(GLOBAL_CONFIG_FILE, data)
+    global_config_file = get_global_config_file()
+    _write_toml(global_config_file, data)
     # Enforce strict 600 permissions for secure API key storage
     try:
-        os.chmod(GLOBAL_CONFIG_FILE, 0o600)
+        os.chmod(global_config_file, 0o600)
     except Exception:
         pass
 
 
 def load_local_config() -> Dict[str, Any]:
-    return _read_toml(LOCAL_CONFIG_FILE)
+    return _read_toml(get_local_config_file())
 
 
 def resolve_overrides(**user_kwargs: Any) -> Dict[str, Any]:

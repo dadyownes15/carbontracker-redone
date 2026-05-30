@@ -4,11 +4,16 @@ import subprocess
 import sys
 import uuid
 from datetime import datetime
-from threading import Event
+from threading import Event, Thread
 from typing import List, Optional
 
+from carbontracker.core.events import (
+    ProcessExitedEvent,
+    ProcessOutputEvent,
+    ProcessStartedEvent,
+    TrackerEvent,
+)
 from carbontracker.core.markers import Marker
-from carbontracker.core.events import TrackerEvent
 from carbontracker.observers.base import ObserverThread
 
 class SubprocessObserverThread(ObserverThread):
@@ -17,7 +22,9 @@ class SubprocessObserverThread(ObserverThread):
         command: List[str],
         aggregation_queue: "queue.Queue[TrackerEvent]",
         event_sink: "List[queue.Queue[TrackerEvent]]",
-        notify_events: List[Event]
+        notify_events: List[Event],
+        trace_id: str | None = None,
+        capture_output_events: bool = False,
     ) -> None:
         super().__init__(
             aggregation_queue=aggregation_queue,
@@ -27,7 +34,8 @@ class SubprocessObserverThread(ObserverThread):
         )
         self.command = command
         self._span_stack: List[str] = []
-        self._trace_id = str(uuid.uuid4())
+        self._trace_id = trace_id if trace_id is not None else str(uuid.uuid4())
+        self.capture_output_events = capture_output_events
 
     def _make_marker(self, span_id: str, parent_span_id: Optional[str]) -> Marker:
         return Marker(
@@ -37,6 +45,41 @@ class SubprocessObserverThread(ObserverThread):
             parent_span_id=parent_span_id,
             timestamp=datetime.now()
         )
+
+    def _emit_event(self, event: TrackerEvent) -> None:
+        for sink in self.event_sink:
+            sink.put(event)
+
+    def _handle_stdout_line(self, line: str) -> None:
+        if line.startswith("carbontracker:"):
+            self._handle_marker(line.strip())
+            return
+        if self.capture_output_events:
+            self._emit_event(
+                ProcessOutputEvent(
+                    timestamp=datetime.now(),
+                    stream="stdout",
+                    line=line.rstrip("\n"),
+                    trace_id=self._trace_id,
+                )
+            )
+        else:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+
+    def _handle_stderr_line(self, line: str) -> None:
+        if self.capture_output_events:
+            self._emit_event(
+                ProcessOutputEvent(
+                    timestamp=datetime.now(),
+                    stream="stderr",
+                    line=line.rstrip("\n"),
+                    trace_id=self._trace_id,
+                )
+            )
+        else:
+            sys.stderr.write(line)
+            sys.stderr.flush()
 
     def run(self) -> None:
         if not self.command:
@@ -55,27 +98,78 @@ class SubprocessObserverThread(ObserverThread):
         proc = subprocess.Popen(
             self.command,
             stdout=subprocess.PIPE,
-            stderr=None,  # stderr goes straight to terminal
+            stderr=subprocess.PIPE if self.capture_output_events else None,
             env=env,
             text=True,
             bufsize=1,  # line-buffered
         )
+        self._emit_event(
+            ProcessStartedEvent(
+                timestamp=datetime.now(),
+                command=tuple(self.command),
+                pid=proc.pid,
+                trace_id=self._trace_id,
+            )
+        )
 
-        if proc.stdout:
-            for line in proc.stdout:
-                if line.startswith("carbontracker:"):
-                    self._handle_marker(line.strip())
-                else:
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
+        stdout_thread = None
+        stderr_thread = None
+        interrupted = False
 
-        proc.wait()
+        if proc.stdout is not None:
+            stdout_thread = Thread(
+                target=self._drain_stream,
+                args=(proc.stdout, self._handle_stdout_line),
+                daemon=True,
+            )
+            stdout_thread.start()
+
+        if proc.stderr is not None:
+            stderr_thread = Thread(
+                target=self._drain_stream,
+                args=(proc.stderr, self._handle_stderr_line),
+                daemon=True,
+            )
+            stderr_thread.start()
+
+        try:
+            while proc.poll() is None:
+                if self._stop_event.wait(timeout=0.1):
+                    interrupted = True
+                    proc.terminate()
+                    break
+            proc.wait()
+        except KeyboardInterrupt:
+            interrupted = True
+            proc.terminate()
+            proc.wait()
+            raise
+        finally:
+            if stdout_thread is not None:
+                stdout_thread.join()
+            if stderr_thread is not None:
+                stderr_thread.join()
+            self._emit_event(
+                ProcessExitedEvent(
+                    timestamp=datetime.now(),
+                    return_code=proc.returncode,
+                    interrupted=interrupted,
+                    trace_id=self._trace_id,
+                )
+            )
 
         # Close any unclosed spans (in reverse order)
         while self._span_stack:
             span = self._span_stack.pop()
             parent = self._span_stack[-1] if self._span_stack else None
             self._emit_stop(self._make_marker(span, parent_span_id=parent))
+
+    def _drain_stream(self, stream, line_handler) -> None:
+        try:
+            for line in stream:
+                line_handler(line)
+        finally:
+            stream.close()
 
     def _handle_marker(self, line: str) -> None:
         parts = line.split(":")

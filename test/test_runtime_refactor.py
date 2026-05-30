@@ -1,12 +1,22 @@
 import queue
+import re
 import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
 
+from carbontracker.core.events import SessionMetadata, StartedSession
 from carbontracker.core.engine import CarbonTrackerEngine
 from carbontracker.core.exceptions import WrongModeError
-from carbontracker.core.runtime import RuntimeBundle, RuntimeOptions, build_subprocess_runtime
+from carbontracker.core import runtime as runtime_module
+from carbontracker.core.runtime import (
+    RuntimeBundle,
+    RuntimeOptions,
+    build_subprocess_runtime,
+    generate_default_run_name,
+)
 from carbontracker.core.stats import SessionFinalStats
 from carbontracker.core.types import Component
 from carbontracker.entrypoints.cli import cli as cli_module
@@ -64,8 +74,16 @@ def make_fake_bundle(manual_controls=None):
     provider = FakeThread("provider")
     aggregator = FakeThread("aggregator", stop_result=stats)
     reporter = FakeThread("reporter")
+    metadata = SessionMetadata(
+        project_name="carbontracker",
+        run_name="test",
+        log_dir="carbontracker_logs/",
+        log_file_path="carbontracker_logs/test_events.jsonl",
+    )
     bundle = RuntimeBundle(
         options=RuntimeOptions(run_name="test", auto_detect_location=False),
+        metadata=metadata,
+        log_file_path=Path(metadata.log_file_path),
         observer_thread=observer,
         provider_threads=[provider],
         aggregator_thread=aggregator,
@@ -167,3 +185,85 @@ def test_cli_hidden_run_builds_subprocess_runtime_and_finishes(monkeypatch, tmp_
     assert isinstance(captured["options"], RuntimeOptions)
     assert bundle.observer_thread.joined == 2
     assert bundle.aggregator_thread.stopped is True
+
+
+def test_generated_run_name_is_timestamp_shaped():
+    run_name = generate_default_run_name()
+
+    assert re.fullmatch(r"run_\d{8}_\d{6}", run_name)
+
+
+def test_runtime_metadata_and_jsonl_path_share_run_identity(monkeypatch, tmp_path):
+    class FakeProviderThread(FakeThread):
+        def __init__(self, name):
+            super().__init__(name)
+
+    def fake_power_thread(**_kwargs):
+        return FakeProviderThread("power")
+
+    def fake_intensity_thread(**_kwargs):
+        resolution = SimpleNamespace(
+            provider_name="static",
+            location=None,
+            static_intensity=100.0,
+        )
+        return FakeProviderThread("intensity"), resolution
+
+    def fake_forecast_thread(**_kwargs):
+        return FakeProviderThread("forecast")
+
+    monkeypatch.setattr(runtime_module, "create_power_thread", fake_power_thread)
+    monkeypatch.setattr(runtime_module, "create_intensity_thread", fake_intensity_thread)
+    monkeypatch.setattr(
+        runtime_module, "create_intensity_forecast_thread", fake_forecast_thread
+    )
+
+    options = RuntimeOptions(
+        project_name="project-a",
+        run_name="run-a",
+        log_dir=str(tmp_path),
+        auto_detect_location=False,
+    )
+    bundle = build_subprocess_runtime(["python"], options)
+
+    assert bundle.options.project_name == "project-a"
+    assert bundle.options.run_name == "run-a"
+    assert bundle.metadata.project_name == "project-a"
+    assert bundle.metadata.run_name == "run-a"
+    assert bundle.log_file_path == tmp_path / "run-a_events.jsonl"
+    assert bundle.metadata.log_file_path == str(tmp_path / "run-a_events.jsonl")
+
+    started_event = bundle.logger_queue.get_nowait()
+    assert isinstance(started_event, StartedSession)
+    assert started_event.metadata == bundle.metadata
+
+
+def test_cli_run_name_override_does_not_replace_project_name(monkeypatch, tmp_path):
+    script = tmp_path / "tiny.py"
+    script.write_text("print('ok')\n")
+    bundle, _ = make_fake_bundle()
+    captured = {}
+
+    monkeypatch.setattr(cli_module, "resolve_overrides", lambda **kwargs: kwargs)
+
+    def fake_build(command, options):
+        captured["options"] = options
+        return bundle
+
+    monkeypatch.setattr(cli_module, "build_subprocess_runtime", fake_build)
+
+    result = CliRunner().invoke(
+        cli_module.main,
+        [
+            "--project-name",
+            "proj",
+            "--run-name",
+            "run-explicit",
+            sys.executable,
+            str(script),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["options"].project_name == "proj"
+    assert captured["options"].run_name == "run-explicit"

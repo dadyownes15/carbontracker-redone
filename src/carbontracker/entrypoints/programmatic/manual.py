@@ -1,17 +1,15 @@
-import time
 from typing import Callable
 
 from carbontracker.config.config import LogLevel
 from carbontracker.core.engine import CarbonTrackerEngine
 from carbontracker.core.execution_guard import GuardVerdict
-from carbontracker.core.runtime import RuntimeOptions, build_manual_runtime
+from carbontracker.core.runtime import (
+    RuntimeOptions,
+    build_manual_runtime,
+    generate_default_run_name,
+)
 from carbontracker.core.stats import SessionFinalStats
 from carbontracker.core.types import Component, Location, IntensityMethod, BreachAction
-
-
-def _generate_default_name() -> str:
-    return f"run_{int(time.time())}"
-
 
 def _reject_unsupported_runtime_features(
     *,
@@ -59,6 +57,7 @@ class CarbonTracker:
         epochs: int,
         *,
         project_name: str | None = None,
+        run_name: str | None = None,
         log_dir: str = "carbontracker_logs/",
         ignore_errors: bool = True,
         log_level: LogLevel = LogLevel.WARNING,
@@ -99,11 +98,11 @@ class CarbonTracker:
             if components is not None
             else [Component.CPU, Component.GPU, Component.RAM]
         )
-        resolved_run_name = (
-            project_name if project_name is not None else _generate_default_name()
-        )
+        resolved_project_name = project_name if project_name is not None else "carbontracker"
+        resolved_run_name = run_name if run_name is not None else generate_default_run_name()
 
         self._options = RuntimeOptions(
+            project_name=resolved_project_name,
             run_name=resolved_run_name,
             ignore_errors=ignore_errors,
             log_level=log_level,

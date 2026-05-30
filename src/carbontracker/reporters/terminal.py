@@ -4,7 +4,12 @@ import sys
 import logging
 
 from carbontracker.config.config import LogLevel
-from carbontracker.core.events import MeasurementEvent, TrackerEvent, DiagnosticEvent, LogSeverity
+from carbontracker.core.events import (
+    DiagnosticEvent,
+    LogSeverity,
+    ProcessOutputEvent,
+    TrackerEvent,
+)
 from carbontracker.core.utils import SEVERITY_MAP
 
 
@@ -34,7 +39,10 @@ class TerminalOutputThread(Thread):
                 self.event_queue.task_done()
                 break
 
-            if isinstance(event, DiagnosticEvent):
+            if isinstance(event, ProcessOutputEvent):
+                stream = sys.stderr if event.stream == "stderr" else sys.stdout
+                print(event.line, file=stream)
+            elif isinstance(event, DiagnosticEvent):
                 event_level = SEVERITY_MAP.get(event.severity, logging.INFO)
                 if event_level >= self.log_level:
                     if event.severity in [

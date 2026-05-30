@@ -14,7 +14,8 @@ class ManualObserverThread(ObserverThread):
         self,
         aggregation_queue: "queue.Queue[TrackerEvent]",
         event_sink: "List[queue.Queue[TrackerEvent]]",
-        notify_events: List[Event]
+        notify_events: List[Event],
+        trace_id: str | None = None,
     ) -> None:
         super().__init__(
             aggregation_queue=aggregation_queue,
@@ -24,7 +25,7 @@ class ManualObserverThread(ObserverThread):
         )
         self._current_epoch = 0
         self._current_span_id: Optional[str] = None
-        self._trace_id = str(uuid.uuid4())
+        self._trace_id = trace_id if trace_id is not None else str(uuid.uuid4())
 
     def manual_start(self) -> None:
         self._current_epoch += 1
